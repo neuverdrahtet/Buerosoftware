@@ -1188,16 +1188,29 @@ function renderEmailList(){
   // Build label list: system + user labels (subfolders)
   const allL = GMAIL.allLabels||[];
   const userLabels = allL.filter(l=>l.type==='user');
-  const labelHTML = [
-    ...SYS_LABELS.map(l=>`<div onclick="gmailLoadThreads('${l.id}')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${GMAIL.curLabel===l.id?700:500};color:${GMAIL.curLabel===l.id?'var(--navy3)':'var(--t2)'};background:${GMAIL.curLabel===l.id?'#fff':'transparent'};margin-bottom:1px">
-        <span>${l.ic}</span><span style="flex:1">${l.lb}</span>
-        ${l.id==='INBOX'&&unread>0?`<span style="background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px">${unread}</span>`:''}
-      </div>`),
-    userLabels.length ? '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);padding:10px 10px 3px">Ordner</div>' : '',
-    ...userLabels.map(l=>`<div onclick="gmailLoadThreads('${l.id}')" title="${esc(l.name)}" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${GMAIL.curLabel===l.id?700:500};color:${GMAIL.curLabel===l.id?'var(--navy3)':'var(--t2)'};background:${GMAIL.curLabel===l.id?'#fff':'transparent'};margin-bottom:1px;padding-left:${l.name.includes('/')?'18px':'10px'}">
-        <span>📁</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.name.includes('/')?l.name.split('/').pop():l.name)}</span>
-      </div>`)
-  ].join('');
+  // Build label HTML using string concat to avoid nested template literal issues
+  function makeLabelItem(id, ic, lb, isActive, unreadCnt){
+    const fw = isActive ? 700 : 500;
+    const col = isActive ? 'var(--navy3)' : 'var(--t2)';
+    const bg = isActive ? '#fff' : 'transparent';
+    const badge = (id==='INBOX'&&unreadCnt>0) ? '<span style="background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px">'+unreadCnt+'</span>' : '';
+    return '<div onclick="gmailLoadThreads(\'' + id + '\')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:'+fw+';color:'+col+';background:'+bg+';margin-bottom:1px">'+
+      '<span>'+ic+'</span><span style="flex:1">'+lb+'</span>'+badge+'</div>';
+  }
+  function makeUserLabelItem(l, isActive){
+    const fw = isActive ? 700 : 500;
+    const col = isActive ? 'var(--navy3)' : 'var(--t2)';
+    const bg = isActive ? '#fff' : 'transparent';
+    const pl = l.name.includes('/') ? '18px' : '10px';
+    const nm = l.name.includes('/') ? l.name.split('/').pop() : l.name;
+    return '<div onclick="gmailLoadThreads(\'' + l.id + '\')" style="display:flex;align-items:center;gap:8px;padding:7px '+pl+';border-radius:8px;cursor:pointer;font-size:12px;font-weight:'+fw+';color:'+col+';background:'+bg+';margin-bottom:1px">'+
+      '<span>📁</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(nm)+'</span></div>';
+  }
+  let labelHTML = SYS_LABELS.map(l=>makeLabelItem(l.id, l.ic, l.lb, GMAIL.curLabel===l.id, unread)).join('');
+  if(userLabels.length){
+    labelHTML += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);padding:10px 10px 3px">Ordner</div>';
+    labelHTML += userLabels.map(l=>makeUserLabelItem(l, GMAIL.curLabel===l.id)).join('');
+  }
   document.getElementById('content').innerHTML=`
   <div style="display:grid;grid-template-columns:210px 1fr;height:calc(100vh - 104px);background:#fff;border-radius:14px;border:1px solid var(--border);overflow:hidden;box-shadow:var(--sh)">
     <!-- SIDEBAR -->

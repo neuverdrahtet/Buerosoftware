@@ -444,42 +444,76 @@ async function firebaseSignIn(){
     alert('Firebase noch nicht geladen. Bitte Seite neu laden.');return;
   }
   try{
-    const {signInWithPopup} = window.FB_FUNCS;
+    const {signInWithPopup, GoogleAuthProvider} = window.FB_FUNCS;
+    // Request Gmail + Calendar scopes
+    window.FB_PROVIDER.addScope('https://www.googleapis.com/auth/gmail.modify');
+    window.FB_PROVIDER.addScope('https://www.googleapis.com/auth/gmail.compose');
+    window.FB_PROVIDER.addScope('https://www.googleapis.com/auth/gmail.send');
+    window.FB_PROVIDER.addScope('https://www.googleapis.com/auth/calendar');
+    window.FB_PROVIDER.addScope('https://www.googleapis.com/auth/userinfo.email');
+    // Force account selection to get fresh token
+    window.FB_PROVIDER.setCustomParameters({prompt:'select_account'});
     const result = await signInWithPopup(window.FB_AUTH, window.FB_PROVIDER);
-    // Get the OAuth access token for Gmail API
-    const credential = result._tokenResponse;
-    // Store access token
-    if(result._tokenResponse?.oauthAccessToken){
-      GMAIL.token = result._tokenResponse.oauthAccessToken;
-    } else {
-      // Try getting it from credential
-      const GoogleAuthProvider = window.FB_FUNCS.GoogleAuthProvider;
-      const oauthCred = GoogleAuthProvider.credentialFromResult(result);
-      GMAIL.token = oauthCred?.accessToken;
-    }
-    if(GMAIL.token){
+    // Extract OAuth2 access token (for Gmail/Calendar API)
+    const oauthCred = GoogleAuthProvider.credentialFromResult(result);
+    const accessToken = oauthCred?.accessToken;
+    if(accessToken){
+      GMAIL.token = accessToken;
       GMAIL.loaded = true;
       GMAIL.userEmail = result.user.email;
       googleConnected = true;
-      gmailSaveSession(GMAIL.token, 3500);
-      sessionStorage.setItem('nv_google_email', GMAIL.userEmail);
+      // Save token to session
+      gmailSaveSession(accessToken, 3500);
+      sessionStorage.setItem('nv_google_email', result.user.email);
       updateGoogleStatus();
+      console.log('Gmail OAuth token obtained successfully');
+    } else {
+      console.warn('No OAuth token received - Gmail may not work');
+      // Still set up Firebase sync
+      GMAIL.userEmail = result.user.email;
     }
     window.FB_USER = result.user;
     window.FB_UID = result.user.uid;
+    // Start Firestore real-time sync
     window.startFirebaseSync();
+    // Load Gmail immediately
+    if(GMAIL.token){
+      await gmailGetProfile();
+      await gmailLoadAllLabels();
+      gmailLoadThreads();
+    }
     return true;
   }catch(e){
     console.error('Firebase sign-in error:', e);
-    if(e.code === 'auth/popup-blocked'){
-      alert('Popup wurde blockiert! Bitte Popup-Blocker deaktivieren für neuverdrahtet.github.io');
-    } else if(e.code === 'auth/unauthorized-domain'){
-      alert('Domain nicht autorisiert. Bitte in Firebase Console unter Authentication → Settings → Authorized domains eintragen:\n\n' + location.hostname);
+    if(e.code==='auth/popup-blocked'){
+      alert('Popup blockiert!\n\nBitte in Chrome:\nEinstellungen → Datenschutz → Website-Einstellungen → Popups → neuverdrahtet.github.io erlauben');
+    } else if(e.code==='auth/unauthorized-domain'){
+      alert('Domain nicht autorisiert!\n\nBitte in Firebase Console:\nAuthentication → Einstellungen → Autorisierte Domains → neuverdrahtet.github.io eintragen');
+    } else if(e.code==='auth/cancelled-popup-request'){
+      return false; // User closed popup, no error needed
     } else {
-      alert('Anmeldung fehlgeschlagen: ' + e.message);
+      alert('Anmeldung fehlgeschlagen: '+e.message+'\n\nCode: '+e.code);
     }
     return false;
   }
+}
+
+// Re-authenticate to get fresh Gmail token (called when token expires)
+async function refreshGmailToken(){
+  if(!window.FB_AUTH||!window.FB_USER)return false;
+  try{
+    const {signInWithPopup, GoogleAuthProvider} = window.FB_FUNCS;
+    window.FB_PROVIDER.setCustomParameters({login_hint: GMAIL.userEmail, prompt:'none'});
+    const result = await signInWithPopup(window.FB_AUTH, window.FB_PROVIDER);
+    const oauthCred = GoogleAuthProvider.credentialFromResult(result);
+    if(oauthCred?.accessToken){
+      GMAIL.token = oauthCred.accessToken;
+      GMAIL.loaded = true;
+      gmailSaveSession(oauthCred.accessToken, 3500);
+      return true;
+    }
+  }catch(e){ console.warn('Token refresh failed:', e); }
+  return false;
 }
 
 async function firebaseSignOut(){
@@ -1200,14 +1234,33 @@ function gmailSignOut(){
 }
 
 async function gmailFetch(url,opts={}){
-  const r=await fetch(url,{...opts,headers:{...opts.headers,'Authorization':'Bearer '+GMAIL.token}});
-  if(r.status===401){GMAIL.token=null;GMAIL.loaded=false;renderEmail();return null;}
-  if(!r.ok)return null;
-  return r.headers.get('content-length')==='0'||r.status===204?{}:r.json();
+  if(!GMAIL.token){renderEmail();return null;}
+  let r=await fetch(url,{...opts,headers:{...opts.headers,'Authorization':'Bearer '+GMAIL.token,'Content-Type':'application/json'}});
+  if(r.status===401){
+    // Try to refresh token
+    console.log('Token expired, trying refresh...');
+    const refreshed = await refreshGmailToken().catch(()=>false);
+    if(refreshed&&GMAIL.token){
+      r=await fetch(url,{...opts,headers:{...opts.headers,'Authorization':'Bearer '+GMAIL.token,'Content-Type':'application/json'}});
+    } else {
+      GMAIL.token=null;GMAIL.loaded=false;
+      if(curPage==='email')renderEmail();
+      return null;
+    }
+  }
+  if(!r.ok){console.warn('Gmail API error:',r.status,url);return null;}
+  const ct=r.headers.get('content-type')||'';
+  if(r.status===204||!ct.includes('json'))return {};
+  return r.json().catch(()=>null);
 }
 async function gmailPost(url,body){
+  if(!GMAIL.token)return null;
   const r=await fetch(url,{method:'POST',headers:{'Authorization':'Bearer '+GMAIL.token,'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if(!r.ok)return null;return r.json();
+  if(r.status===401){await refreshGmailToken();return null;}
+  if(!r.ok){console.warn('Gmail POST error:',r.status,url);return null;}
+  const ct=r.headers.get('content-type')||'';
+  if(r.status===204||!ct.includes('json'))return {};
+  return r.json().catch(()=>null);
 }
 
 async function gmailGetProfile(){const d=await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/profile');if(d)GMAIL.userEmail=d.emailAddress||'';}
@@ -2731,6 +2784,18 @@ async function initApp(){
         window.FB_UID = user.uid;
         window.startFirebaseSync();
         updateGoogleStatus();
+        // Try to restore Gmail token from session
+        const savedToken = sessionStorage.getItem('nv_google_token');
+        const savedExp = sessionStorage.getItem('nv_google_token_exp');
+        if(savedToken && savedExp && Date.now() < parseInt(savedExp)){
+          GMAIL.token = savedToken;
+          GMAIL.loaded = true;
+          GMAIL.userEmail = sessionStorage.getItem('nv_google_email')||user.email;
+          googleConnected = true;
+          updateGoogleStatus();
+          // Auto-load emails if on email page
+          if(curPage==='email') gmailLoadThreads();
+        }
       }
     }
   }, 1500);

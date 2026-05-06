@@ -5,6 +5,56 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>NEUVERDRAHTET – Bürosystem Pro</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCdZv8g1SIly0VMKkgRndL-Y1UGVju8_bw",
+    authDomain: "neuverdrahtet-buero.firebaseapp.com",
+    projectId: "neuverdrahtet-buero",
+    storageBucket: "neuverdrahtet-buero.firebasestorage.app",
+    messagingSenderId: "606624718632",
+    appId: "1:606624718632:web:d08caeb2ef0c331fe93a1d"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+  const provider = new GoogleAuthProvider();
+  provider.addScope('https://www.googleapis.com/auth/gmail.modify');
+  provider.addScope('https://www.googleapis.com/auth/gmail.compose');
+  provider.addScope('https://www.googleapis.com/auth/gmail.send');
+  provider.addScope('https://www.googleapis.com/auth/calendar');
+
+  // Enable offline persistence
+  enableIndexedDbPersistence(db).catch(err => console.log('Persistence:', err.code));
+
+  // Expose to window for use in non-module scripts
+  window.FB_DB = db;
+  window.FB_AUTH = auth;
+  window.FB_PROVIDER = provider;
+  window.FB_FUNCS = { doc, setDoc, getDoc, onSnapshot, collection, signInWithPopup, onAuthStateChanged, signOut, GoogleAuthProvider };
+
+  // Auth state listener
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      window.FB_USER = user;
+      window.FB_UID = user.uid;
+      // Get Google OAuth token for Gmail/Calendar API
+      user.getIdToken().then(token => {
+        window.FB_ID_TOKEN = token;
+      });
+      // Start real-time sync
+      if (window.startFirebaseSync) window.startFirebaseSync();
+    } else {
+      window.FB_USER = null;
+      window.FB_UID = null;
+    }
+  });
+</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
@@ -274,74 +324,178 @@ let logoData=null,curMT='',curMId=null,curDT=null,curDId=null,dokPosId=0,ptOffse
 let googleConnected=false;
 
 // ══════════════════════════════════════════════
-// INDEXEDDB – Dauerhafte Speicherung
+// FIREBASE FIRESTORE – Echtzeit-Synchronisation
 // ══════════════════════════════════════════════
-const IDB_NAME = 'neuverdrahtet_db';
-const IDB_STORE = 'appdata';
-const IDB_KEY = 'nv_pro_v1';
-let idb = null;
+const IDB_KEY = 'nv_pro_v1'; // kept for localStorage fallback
+let fbUnsubscribe = null;
+let fbSaveTimer = null;
 
-function openIDB(){
-  return new Promise((resolve, reject)=>{
-    if(idb){resolve(idb);return;}
-    const req = indexedDB.open(IDB_NAME, 1);
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      if(!db.objectStoreNames.contains(IDB_STORE)){
-        db.createObjectStore(IDB_STORE);
-      }
-    };
-    req.onsuccess = e => { idb = e.target.result; resolve(idb); };
-    req.onerror = e => {
-      console.warn('IndexedDB fehler, nutze localStorage als Fallback');
-      resolve(null);
-    };
-  });
-}
-
+// Debounced save – max once per second
 async function save(){
-  try{
-    const db = await openIDB();
-    if(db){
-      const tx = db.transaction(IDB_STORE, 'readwrite');
-      tx.objectStore(IDB_STORE).put(JSON.stringify(DB), IDB_KEY);
-      await new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=rej;});
-    } else {
-      // Fallback localStorage
-      localStorage.setItem(IDB_KEY, JSON.stringify(DB));
-    }
-  } catch(e){
-    try{localStorage.setItem(IDB_KEY, JSON.stringify(DB));}catch(e2){}
-  }
+  // Always save locally first (instant)
+  try{ localStorage.setItem(IDB_KEY, JSON.stringify(DB)); }catch(e){}
   showS();
+  // Then sync to Firebase if logged in
+  if(!window.FB_DB || !window.FB_UID) return;
+  clearTimeout(fbSaveTimer);
+  fbSaveTimer = setTimeout(async ()=>{
+    try{
+      const {doc, setDoc} = window.FB_FUNCS;
+      const ref = doc(window.FB_DB, 'users', window.FB_UID, 'data', 'main');
+      // Save in chunks to avoid 1MB Firestore limit
+      const chunks = {
+        firma: DB.firma,
+        kunden: DB.kunden,
+        anfragen: DB.anfragen,
+        projekte: DB.projekte,
+        auftraege: DB.auftraege,
+        termine: DB.termine,
+        mitarbeiter: DB.mitarbeiter,
+      };
+      const chunks2 = {
+        material: DB.material,
+        leistungen: DB.leistungen,
+        angebote: DB.angebote,
+        ab: DB.ab,
+        rechnungen: DB.rechnungen,
+        abschlag: DB.abschlag,
+        lieferschein: DB.lieferschein,
+        mahnungen: DB.mahnungen,
+        buchhaltung: DB.buchhaltung,
+        zeitbuchungen: DB.zeitbuchungen,
+        plantafel: DB.plantafel,
+      };
+      await setDoc(doc(window.FB_DB,'users',window.FB_UID,'data','chunk1'), chunks, {merge:true});
+      await setDoc(doc(window.FB_DB,'users',window.FB_UID,'data','chunk2'), chunks2, {merge:true});
+    }catch(e){ console.warn('Firebase save error:', e); }
+  }, 800);
 }
 
 async function load(){
+  // Load from localStorage first (instant startup)
   try{
-    const db = await openIDB();
-    let d = null;
-    if(db){
-      const tx = db.transaction(IDB_STORE, 'readonly');
-      const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
-      d = await new Promise((res,rej)=>{req.onsuccess=()=>res(req.result);req.onerror=rej;});
-      if(d) d = JSON.parse(d);
+    const ls = localStorage.getItem(IDB_KEY);
+    if(ls){
+      const d = JSON.parse(ls);
+      applyDBData(d);
     }
-    // Fallback: try localStorage if IDB empty
-    if(!d){
-      const ls = localStorage.getItem(IDB_KEY)||localStorage.getItem('nv_pro_v1')||localStorage.getItem('nv_b2')||localStorage.getItem('nv_buero_v1');
-      if(ls){ d = JSON.parse(ls); console.log('Migrated from localStorage to IndexedDB'); }
-    }
-    if(d){
-      if(d.firma) Object.assign(DB.firma, d.firma);
-      ['kunden','anfragen','projekte','auftraege','material','leistungen','angebote','ab',
-       'rechnungen','abschlag','lieferschein','mahnungen','zeitbuchungen','plantafel',
-       'buchhaltung','termine','mitarbeiter'].forEach(k=>{if(d[k])DB[k]=d[k];});
-      if(DB.firma.logo) logoData = DB.firma.logo;
-      // After migration from localStorage, save to IDB
-      if(d && db) save();
-    }
-  } catch(e){ console.warn('Load error:', e); }
+  }catch(e){}
+  // Firebase will override via real-time listener (startFirebaseSync)
 }
+
+function applyDBData(d){
+  if(!d) return;
+  if(d.firma) Object.assign(DB.firma, d.firma);
+  ['kunden','anfragen','projekte','auftraege','material','leistungen','angebote','ab',
+   'rechnungen','abschlag','lieferschein','mahnungen','zeitbuchungen','plantafel',
+   'buchhaltung','termine','mitarbeiter'].forEach(k=>{if(d[k])DB[k]=d[k];});
+  if(DB.firma && DB.firma.logo) logoData = DB.firma.logo;
+}
+
+// Real-time Firestore listener
+window.startFirebaseSync = async function(){
+  if(fbUnsubscribe){ fbUnsubscribe(); fbUnsubscribe=null; }
+  if(!window.FB_DB || !window.FB_UID) return;
+  const {doc, onSnapshot} = window.FB_FUNCS;
+  let chunk1Data={}, chunk2Data={};
+  // Listen to chunk1
+  fbUnsubscribe = onSnapshot(
+    doc(window.FB_DB,'users',window.FB_UID,'data','chunk1'),
+    snap => {
+      if(snap.exists()){
+        chunk1Data = snap.data();
+        applyDBData({...chunk1Data, ...chunk2Data});
+        try{ localStorage.setItem(IDB_KEY, JSON.stringify(DB)); }catch(e){}
+        if(window._appStarted) renderPage(curPage);
+      }
+    }, err => console.warn('Firestore listen error:', err)
+  );
+  // Listen to chunk2
+  onSnapshot(
+    doc(window.FB_DB,'users',window.FB_UID,'data','chunk2'),
+    snap => {
+      if(snap.exists()){
+        chunk2Data = snap.data();
+        applyDBData({...chunk1Data, ...chunk2Data});
+        try{ localStorage.setItem(IDB_KEY, JSON.stringify(DB)); }catch(e){}
+        if(window._appStarted) renderPage(curPage);
+      }
+    }, err => console.warn('Firestore listen error:', err)
+  );
+  // Also get Gmail token from Firebase auth
+  if(window.FB_USER){
+    window.FB_USER.getIdToken(true).then(async token=>{
+      // Use Google OAuth token for Gmail API
+      // Firebase auth uses provider token
+      const credential = window.FB_USER.providerData.find(p=>p.providerId==='google.com');
+      if(credential){
+        // Refresh OAuth token via Firebase
+        const result = await window.FB_AUTH.currentUser?.getIdTokenResult();
+        console.log('Firebase auth OK, Gmail will use stored token');
+      }
+    });
+  }
+  console.log('Firebase real-time sync started');
+};
+
+// Firebase Google Sign-In (replaces Gmail OAuth)
+async function firebaseSignIn(){
+  if(!window.FB_AUTH || !window.FB_PROVIDER){
+    alert('Firebase noch nicht geladen. Bitte Seite neu laden.');return;
+  }
+  try{
+    const {signInWithPopup} = window.FB_FUNCS;
+    const result = await signInWithPopup(window.FB_AUTH, window.FB_PROVIDER);
+    // Get the OAuth access token for Gmail API
+    const credential = result._tokenResponse;
+    // Store access token
+    if(result._tokenResponse?.oauthAccessToken){
+      GMAIL.token = result._tokenResponse.oauthAccessToken;
+    } else {
+      // Try getting it from credential
+      const GoogleAuthProvider = window.FB_FUNCS.GoogleAuthProvider;
+      const oauthCred = GoogleAuthProvider.credentialFromResult(result);
+      GMAIL.token = oauthCred?.accessToken;
+    }
+    if(GMAIL.token){
+      GMAIL.loaded = true;
+      GMAIL.userEmail = result.user.email;
+      googleConnected = true;
+      gmailSaveSession(GMAIL.token, 3500);
+      sessionStorage.setItem('nv_google_email', GMAIL.userEmail);
+      updateGoogleStatus();
+    }
+    window.FB_USER = result.user;
+    window.FB_UID = result.user.uid;
+    window.startFirebaseSync();
+    return true;
+  }catch(e){
+    console.error('Firebase sign-in error:', e);
+    if(e.code === 'auth/popup-blocked'){
+      alert('Popup wurde blockiert! Bitte Popup-Blocker deaktivieren für neuverdrahtet.github.io');
+    } else if(e.code === 'auth/unauthorized-domain'){
+      alert('Domain nicht autorisiert. Bitte in Firebase Console unter Authentication → Settings → Authorized domains eintragen:\n\n' + location.hostname);
+    } else {
+      alert('Anmeldung fehlgeschlagen: ' + e.message);
+    }
+    return false;
+  }
+}
+
+async function firebaseSignOut(){
+  if(fbUnsubscribe){ fbUnsubscribe(); fbUnsubscribe=null; }
+  if(window.FB_AUTH){
+    const {signOut} = window.FB_FUNCS;
+    await signOut(window.FB_AUTH);
+  }
+  GMAIL.token=null; GMAIL.loaded=false; googleConnected=false;
+  window.FB_USER=null; window.FB_UID=null;
+  try{ sessionStorage.clear(); }catch(e){}
+  updateGoogleStatus();
+  renderEmail();
+}
+
+
 function showS(){const e=document.getElementById('si');e.classList.add('show');clearTimeout(window._st);window._st=setTimeout(()=>e.classList.remove('show'),2000);}
 const fmt=n=>(+n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
 const fmtN=n=>(+n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -836,10 +990,24 @@ function exportUStVA(){alert('USt-VA Export als PDF:\n\nDiese Funktion erstellt 
 // INTEGRATIONEN
 // ════════════════════════════════════════════════════
 function renderIntegrationen(){
+  const fbDomain = location.hostname;
   document.getElementById('content').innerHTML=`
   <div class="g2">
     <div class="card">
       <div class="ct" style="margin-bottom:16px">Google Integration</div>
+      <!-- Firebase Sync Status -->
+      <div style="background:${window.FB_USER?'#E8F5EE':'#FEF3E5'};border:1px solid ${window.FB_USER?'#27ae60':'var(--orange)'};border-radius:10px;padding:14px;margin-bottom:14px;display:flex;align-items:center;gap:12px">
+        <div style="font-size:24px">${window.FB_USER?'🔥':'⚠️'}</div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:13px;color:${window.FB_USER?'var(--green)':'var(--orange)'}">
+            ${window.FB_USER?'Firebase verbunden – Echtzeit-Sync aktiv':'Firebase nicht verbunden'}
+          </div>
+          <div style="font-size:11px;color:var(--t2);margin-top:3px">
+            ${window.FB_USER?'Angemeldet als: '+window.FB_USER.email+' · Alle Daten werden synchronisiert':'Bitte über E-Mail (Gmail) anmelden für Sync'}
+          </div>
+        </div>
+        ${window.FB_USER?`<button class="btn bo bsm" style="color:var(--red)" onclick="firebaseSignOut()">Abmelden</button>`:`<button class="btn bg2 bsm" onclick="pg('email')">Jetzt anmelden</button>`}
+      </div>
       <div style="display:flex;align-items:center;gap:14px;padding:16px;background:#F8F9FD;border-radius:10px;border:1px solid var(--border);margin-bottom:12px">
         <svg width="32" height="32" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
         <div style="flex:1">
@@ -885,6 +1053,17 @@ function renderIntegrationen(){
         <span class="bdg ${cls}">${status}</span>
       </div>`).join('')}
       <div class="div"></div>
+      <div class="ct" style="margin-bottom:8px">Firebase Setup</div>
+      <div style="background:#F4F7FB;border-radius:10px;padding:12px;margin-bottom:14px;border-left:3px solid var(--gold)">
+        <div style="font-size:11px;font-weight:700;color:var(--navy3);margin-bottom:6px">🔥 Wichtig: Firebase Domain freischalten</div>
+        <div style="font-size:11px;color:var(--t2);line-height:1.7">
+          Damit der Login funktioniert, muss deine Domain in Firebase freigegeben sein:<br>
+          1. <a href="https://console.firebase.google.com/project/neuverdrahtet-buero/authentication/settings" target="_blank" style="color:var(--navy);font-weight:600">Firebase Console → Authentication → Settings</a><br>
+          2. Unter "Autorisierte Domains" hinzufügen:<br>
+          <code style="background:#fff;padding:2px 6px;border-radius:4px;border:1px solid var(--border)">${fbDomain}</code>
+          und <code style="background:#fff;padding:2px 6px;border-radius:4px;border:1px solid var(--border)">neuverdrahtet.github.io</code>
+        </div>
+      </div>
       <div class="ct" style="margin-bottom:12px">Import / Export</div>
       <div style="display:flex;flex-direction:column;gap:8px">
         <button class="btn bg2" style="width:100%" onclick="showImportModal()">📥 Kunden / Material / Leistungen importieren</button>
@@ -906,11 +1085,15 @@ function toggleGoogle(type){
 }
 async function clearAllData(){
   if(!confirm('Wirklich ALLE Daten löschen? Das kann nicht rückgängig gemacht werden!'))return;
-  try{
-    const db=await openIDB();
-    if(db){const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).clear();}
-    localStorage.clear();
-  }catch(e){}
+  try{ localStorage.clear(); }catch(e){}
+  // Clear Firebase too
+  if(window.FB_DB && window.FB_UID){
+    try{
+      const {doc, setDoc} = window.FB_FUNCS;
+      await setDoc(doc(window.FB_DB,'users',window.FB_UID,'data','chunk1'),{});
+      await setDoc(doc(window.FB_DB,'users',window.FB_UID,'data','chunk2'),{});
+    }catch(e){ console.warn(e); }
+  }
   location.reload();
 }
 
@@ -984,35 +1167,10 @@ function updateGoogleStatus(){
 }
 
 function gmailAuth(){
-  loadGoogleScripts(()=>{
-    try{
-      const client=google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: GOOGLE_SCOPES,
-        prompt: '',  // no prompt if already authorized
-        callback:(resp)=>{
-          if(resp.error){
-            console.error('OAuth error:', resp);
-            if(resp.error==='popup_closed_by_user'){return;}
-            // Try with consent prompt
-            const client2=google.accounts.oauth2.initTokenClient({
-              client_id: GOOGLE_CLIENT_ID,
-              scope: GOOGLE_SCOPES,
-              prompt: 'consent',
-              callback:(resp2)=>{
-                if(resp2.error){alert('Anmeldung fehlgeschlagen: '+resp2.error);return;}
-                onGoogleToken(resp2);
-              }
-            });
-            client2.requestAccessToken();
-            return;
-          }
-          onGoogleToken(resp);
-        }
-      });
-      client.requestAccessToken();
-    }catch(e){
-      alert('Google Login Fehler: '+e.message+'\n\nBitte stelle sicher dass:\n1. Du die App über einen Webserver öffnest (nicht file://)\n2. Die Client-ID korrekt ist\n3. Die Redirect-URI in der Google Console eingetragen ist');
+  // Use Firebase Authentication instead of direct OAuth
+  firebaseSignIn().then(ok=>{
+    if(ok){
+      renderEmail();
     }
   });
 }
@@ -1156,11 +1314,20 @@ function renderEmailLogin(){
     <div style="font-size:13px;color:var(--t2);margin-bottom:28px;line-height:1.7">
       E-Mails lesen, beantworten und Angebote & Rechnungen<br>direkt aus neuverdrahtet versenden.
     </div>
-    <button onclick="gmailAuth()" style="display:inline-flex;align-items:center;gap:12px;padding:13px 28px;background:#fff;border:2px solid var(--border);border-radius:12px;cursor:pointer;font-family:inherit;font-size:15px;font-weight:700;color:var(--navy3);box-shadow:var(--sh2)">
+    <button onclick="gmailAuth()" style="display:inline-flex;align-items:center;gap:12px;padding:14px 32px;background:#fff;border:2px solid var(--border);border-radius:12px;cursor:pointer;font-family:inherit;font-size:15px;font-weight:700;color:var(--navy3);box-shadow:var(--sh2);transition:all .2s" onmouseover="this.style.borderColor='var(--navy)';this.style.boxShadow='0 8px 24px rgba(0,0,0,.15)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='var(--sh2)'">
       <svg width="22" height="22" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
       Mit Google anmelden
     </button>
-    <div style="margin-top:14px;font-size:11px;color:var(--t3)">Gmail · Google Kalender · neuverdrahtet UG</div>
+    <div style="margin-top:14px;font-size:12px;color:var(--t3)">Gmail · Google Kalender · Echtzeit-Sync auf allen Geräten</div>
+    <div style="margin-top:20px;background:var(--blue-bg);border-radius:10px;padding:14px;text-align:left;max-width:420px;margin-left:auto;margin-right:auto">
+      <div style="font-size:12px;font-weight:700;color:var(--navy3);margin-bottom:6px">✓ Was sich synchronisiert:</div>
+      <div style="font-size:11px;color:var(--t2);line-height:1.8">
+        📧 Gmail – E-Mails lesen, senden, beantworten<br>
+        📅 Google Kalender – Termine automatisch synchronisiert<br>
+        💾 Alle Daten – Kunden, Rechnungen, Aufträge auf allen Geräten<br>
+        🔄 Echtzeit – Änderungen sofort überall sichtbar
+      </div>
+    </div>
     <div id="file_warning" style="display:none;margin-top:24px;background:#FEF3E5;border:1px solid var(--orange);border-radius:12px;padding:16px;text-align:left">
       <b style="color:var(--orange)">⚠️ Lokale Datei erkannt (file://)</b><br><br>
       <span style="font-size:12px;color:var(--t2);line-height:1.8">
@@ -1221,7 +1388,7 @@ function renderEmailList(){
       </div>
       <div style="padding:10px;border-top:1px solid var(--border)">
         <div style="font-size:10px;color:var(--t3);margin-bottom:6px;word-break:break-all">${GMAIL.userEmail}</div>
-        <button class="btn bo bsm" style="width:100%;font-size:11px" onclick="gmailSignOut()">Abmelden</button>
+        <button class="btn bo bsm" style="width:100%;font-size:11px" onclick="firebaseSignOut()">Abmelden</button>
       </div>
     </div>
     <!-- CONTENT -->
@@ -1735,6 +1902,7 @@ function renderPlantafel(){
       <span style="font-size:13px;font-weight:800;color:var(--navy3)">${label}</span>
       <button class="btn bo bsm" onclick="ptOffset++;renderPlantafel()">▶</button>
       <button class="btn bg2 bsm" onclick="openMod('plantafel')">+ Eintrag</button>
+      ${window.FB_USER?'<span style="font-size:11px;color:var(--green);font-weight:600">🔄 Sync aktiv</span>':'<span style="font-size:11px;color:var(--t3)">⚠️ Nicht angemeldet</span>'}
     </div>
     <div class="ptf">${grid}</div>
   </div>`;
@@ -2535,24 +2703,37 @@ if(!DB.leistungen.find(l=>l.gewerk==='Wohnungsrenovierung')){
 async function initApp(){
   // Ladebildschirm
   document.getElementById('content').innerHTML=`
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px">
-      <div style="width:48px;height:48px;border:4px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite"></div>
-      <div style="font-size:14px;color:var(--t3);font-weight:500">Daten werden geladen...</div>
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:20px">
+      <div style="width:52px;height:52px;border:4px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite"></div>
+      <div>
+        <div style="font-size:15px;color:var(--navy3);font-weight:700;text-align:center">neuverdrahtet Bürosystem</div>
+        <div style="font-size:12px;color:var(--t3);text-align:center;margin-top:4px">Daten werden geladen...</div>
+      </div>
     </div>
     <style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
 
-  // Daten laden aus IndexedDB
+  // Daten laden aus localStorage (schnell)
   await load();
 
-  // Seed-Daten nur wenn leer
-  if(!DB.leistungen.length){ seedLeistungen(); }
-  if(!DB.material.length){ seedMaterial(); }
+  // App starten
+  window._appStarted = true;
+  pg('dashboard');
 
-  // Google Session wiederherstellen
+  // Gmail Session wiederherstellen (im Hintergrund)
   gmailRestoreSession();
 
-  // App starten
-  pg('dashboard');
+  // Firebase Auth prüfen (im Hintergrund)
+  setTimeout(()=>{
+    if(window.FB_AUTH){
+      const user = window.FB_AUTH.currentUser;
+      if(user){
+        window.FB_USER = user;
+        window.FB_UID = user.uid;
+        window.startFirebaseSync();
+        updateGoogleStatus();
+      }
+    }
+  }, 1500);
 }
 
 // Seed-Funktionen (werden nur beim ersten Start aufgerufen)

@@ -273,8 +273,75 @@ const DB={
 let logoData=null,curMT='',curMId=null,curDT=null,curDId=null,dokPosId=0,ptOffset=0,calOffset=0;
 let googleConnected=false;
 
-function save(){try{localStorage.setItem('nv_pro_v1',JSON.stringify(DB));}catch(e){}showS();}
-function load(){try{const d=JSON.parse(localStorage.getItem('nv_pro_v1')||'{}');if(d.firma)Object.assign(DB.firma,d.firma);['kunden','anfragen','projekte','auftraege','material','leistungen','angebote','ab','rechnungen','abschlag','lieferschein','mahnungen','zeitbuchungen','plantafel','buchhaltung','termine','mitarbeiter'].forEach(k=>{if(d[k])DB[k]=d[k];});if(DB.firma.logo)logoData=DB.firma.logo;}catch(e){}}
+// ══════════════════════════════════════════════
+// INDEXEDDB – Dauerhafte Speicherung
+// ══════════════════════════════════════════════
+const IDB_NAME = 'neuverdrahtet_db';
+const IDB_STORE = 'appdata';
+const IDB_KEY = 'nv_pro_v1';
+let idb = null;
+
+function openIDB(){
+  return new Promise((resolve, reject)=>{
+    if(idb){resolve(idb);return;}
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(IDB_STORE)){
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+    req.onsuccess = e => { idb = e.target.result; resolve(idb); };
+    req.onerror = e => {
+      console.warn('IndexedDB fehler, nutze localStorage als Fallback');
+      resolve(null);
+    };
+  });
+}
+
+async function save(){
+  try{
+    const db = await openIDB();
+    if(db){
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(JSON.stringify(DB), IDB_KEY);
+      await new Promise((res,rej)=>{tx.oncomplete=res;tx.onerror=rej;});
+    } else {
+      // Fallback localStorage
+      localStorage.setItem(IDB_KEY, JSON.stringify(DB));
+    }
+  } catch(e){
+    try{localStorage.setItem(IDB_KEY, JSON.stringify(DB));}catch(e2){}
+  }
+  showS();
+}
+
+async function load(){
+  try{
+    const db = await openIDB();
+    let d = null;
+    if(db){
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+      d = await new Promise((res,rej)=>{req.onsuccess=()=>res(req.result);req.onerror=rej;});
+      if(d) d = JSON.parse(d);
+    }
+    // Fallback: try localStorage if IDB empty
+    if(!d){
+      const ls = localStorage.getItem(IDB_KEY)||localStorage.getItem('nv_pro_v1')||localStorage.getItem('nv_b2')||localStorage.getItem('nv_buero_v1');
+      if(ls){ d = JSON.parse(ls); console.log('Migrated from localStorage to IndexedDB'); }
+    }
+    if(d){
+      if(d.firma) Object.assign(DB.firma, d.firma);
+      ['kunden','anfragen','projekte','auftraege','material','leistungen','angebote','ab',
+       'rechnungen','abschlag','lieferschein','mahnungen','zeitbuchungen','plantafel',
+       'buchhaltung','termine','mitarbeiter'].forEach(k=>{if(d[k])DB[k]=d[k];});
+      if(DB.firma.logo) logoData = DB.firma.logo;
+      // After migration from localStorage, save to IDB
+      if(d && db) save();
+    }
+  } catch(e){ console.warn('Load error:', e); }
+}
 function showS(){const e=document.getElementById('si');e.classList.add('show');clearTimeout(window._st);window._st=setTimeout(()=>e.classList.remove('show'),2000);}
 const fmt=n=>(+n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
 const fmtN=n=>(+n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -794,6 +861,7 @@ function renderIntegrationen(){
         <button class="btn bg2" style="width:100%" onclick="showImportModal()">📥 Kunden / Material / Leistungen importieren</button>
         <button class="btn bp" style="width:100%" onclick="exportBackup()">💾 Komplett-Backup (JSON)</button>
         <button class="btn bo" style="width:100%" onclick="document.getElementById('import_file').click()">📂 Backup wiederherstellen</button>
+        <button class="btn bo bsm" style="width:100%;color:var(--red)" onclick="clearAllData()">🗑 Alle Daten löschen</button>
         <input type="file" id="import_file" accept=".json" style="display:none" onchange="importBackup(this)">
       </div>
     </div>
@@ -807,6 +875,16 @@ function toggleGoogle(type){
   document.getElementById('google_status').innerHTML=googleConnected?'<span style="color:var(--green)">● Google verbunden</span>':'';
   renderIntegrationen();
 }
+async function clearAllData(){
+  if(!confirm('Wirklich ALLE Daten löschen? Das kann nicht rückgängig gemacht werden!'))return;
+  try{
+    const db=await openIDB();
+    if(db){const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).clear();}
+    localStorage.clear();
+  }catch(e){}
+  location.reload();
+}
+
 function exportBackup(){const blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`nv_backup_${today().replace(/\./g,'-')}.json`;a.click();}
 function importBackup(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);Object.assign(DB,d);save();alert('Backup erfolgreich importiert!');pg(curPage);}catch(err){alert('Fehler beim Importieren: '+err.message);}};r.readAsText(f);}
 
@@ -2273,7 +2351,6 @@ if(!DB.material.length){
   ];
   M.forEach(([a,n,k,e,ek,vk])=>DB.material.push({id:uid(),artnr:a,name:n,kat:k,einheit:e,ek,vk}));
 }
-pg('dashboard');
 
 // Extra Gewerke
 if(!DB.leistungen.find(l=>l.gewerk==='Elektrosanierung')){
@@ -2301,7 +2378,43 @@ if(!DB.leistungen.find(l=>l.gewerk==='Wohnungsrenovierung')){
   ].forEach(([nr,name,gew,ein,std,preis])=>DB.leistungen.push({id:uid(),nr,name,gewerk:gew,einheit:ein,std,preis}));
 }
 
-pg('dashboard');
+// ══════════════════════════════════════════════
+// APP START – async wegen IndexedDB
+// ══════════════════════════════════════════════
+async function initApp(){
+  // Ladebildschirm
+  document.getElementById('content').innerHTML=`
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px">
+      <div style="width:48px;height:48px;border:4px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite"></div>
+      <div style="font-size:14px;color:var(--t3);font-weight:500">Daten werden geladen...</div>
+    </div>
+    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
+
+  // Daten laden aus IndexedDB
+  await load();
+
+  // Seed-Daten nur wenn leer
+  if(!DB.leistungen.length){ seedLeistungen(); }
+  if(!DB.material.length){ seedMaterial(); }
+
+  // Google Session wiederherstellen
+  gmailRestoreSession();
+
+  // App starten
+  pg('dashboard');
+}
+
+// Seed-Funktionen (werden nur beim ersten Start aufgerufen)
+function seedLeistungen(){
+  // Alle Leistungen aus dem Block oben wurden bereits inline hinzugefügt
+  // wenn DB.leistungen leer ist beim ersten Start
+}
+function seedMaterial(){
+  // Analog
+}
+
+initApp();
+
 </script>
 </body>
 </html>

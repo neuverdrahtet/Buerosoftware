@@ -263,7 +263,7 @@ const DB={
     name:'neuverdrahtet UG (haftungsbeschränkt)',kurz:'neuverdrahtet',
     strasse:'Donnerstr. 131',plzort:'45357 Essen',gf:'Danny Berger',
     tel:'0201 89085050',email:'info@neuverdrahtet.com',web:'www.neuverdrahtet.com',
-    steuernr:'',ust:'',hrb:'',iban:'',bic:'',zahlungsziel:14,stundensatz:75,
+    steuernr:'',ust:'',hrb:'',iban:'',bic:'',kontoinhaber:'Danny Berger',zahlungsziel:14,stundensatz:75,
     schlusstext:'Bitte überweisen Sie den Rechnungsbetrag innerhalb von 14 Tagen ohne Abzug.',
     mahntext:'Bitte überweisen Sie den ausstehenden Betrag innerhalb von 7 Tagen. Bei bereits erfolgter Zahlung betrachten Sie dieses Schreiben als gegenstandslos.',
     nr_ang:'ANG',nr_re:'RE',nr_ab:'AB',nr_ar:'AR',nr_ls:'LS',nr_ma:'MAH',
@@ -654,6 +654,35 @@ function renderBuchhaltung(){
     <div class="sc"><div class="sc-accent" style="background:${einJahr-ausJahr>=0?'var(--green)':'var(--red)'}"></div><div class="sc-icon" style="background:var(--blue-bg)">💹</div><div class="sc-val" style="color:${einJahr-ausJahr>=0?'var(--green)':'var(--red)'}">${fmtN(einJahr-ausJahr)} €</div><div class="sc-lbl">Gewinn ${jahr}</div></div>
     <div class="sc"><div class="sc-accent" style="background:var(--purple)"></div><div class="sc-icon" style="background:var(--purple-bg)">🧮</div><div class="sc-val" style="color:var(--purple)">${fmtN(ust)} €</div><div class="sc-lbl">USt. (19%) abzuführen</div></div>
   </div>
+  <div class="card" style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:36px;height:36px;background:var(--blue-bg);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px">🏦</div>
+        <div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Kontoinhaber</div>
+          <div style="font-size:14px;font-weight:700;color:var(--navy3)">${DB.firma.kontoinhaber||DB.firma.gf||'–'}</div>
+        </div>
+      </div>
+      <div style="width:1px;height:36px;background:var(--border)"></div>
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">IBAN</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text);font-family:monospace">${DB.firma.iban||'–'}</div>
+      </div>
+      <div style="width:1px;height:36px;background:var(--border)"></div>
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">BIC / Bank</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text)">${DB.firma.bic||'–'}</div>
+      </div>
+      <div style="width:1px;height:36px;background:var(--border)"></div>
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Steuernummer</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)">${DB.firma.steuernr||'–'}</div>
+      </div>
+      <div style="margin-left:auto">
+        <button class="btn bo bsm" onclick="pg('einstellungen')">✏️ Bankdaten bearbeiten</button>
+      </div>
+    </div>
+  </div>
   <div class="card">
     <div class="card-hd"><span class="ct">Alle Buchungen</span>
       <div style="display:flex;gap:8px">
@@ -754,7 +783,7 @@ function exportSteuerPDF(){
   // Firmendaten
   doc.setTextColor(...cN);doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text('Betrieb:',ML,y);
   doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...cT);
-  doc.text(`${f.name||''} · GF: ${f.gf||''} · StNr: ${f.steuernr||'–'} · USt-IdNr: ${f.ust||'–'}`,ML+18,y);y+=8;
+  doc.text(`${f.name||''} · GF: ${f.gf||''} · Kto.-Inh.: ${f.kontoinhaber||f.gf||''} · StNr: ${f.steuernr||'–'} · USt-IdNr: ${f.ust||'–'}`,ML+18,y);y+=8;
   doc.setDrawColor(220,228,238);doc.setLineWidth(.5);doc.line(ML,y,ML+CW,y);y+=6;
   // EÜR Tabelle
   doc.setFont('helvetica','bold');doc.setFontSize(11);doc.setTextColor(...cN);doc.text('Einnahmen-Überschuss-Rechnung',ML,y);y+=6;
@@ -786,7 +815,7 @@ function exportSteuerPDF(){
   // Footer
   doc.setFillColor(...cN);doc.rect(0,283,PW,14,'F');
   doc.setTextColor(180,195,215);doc.setFontSize(7);doc.setFont('helvetica','normal');
-  doc.text(`${f.name||''} · IBAN: ${f.iban||''} · ${f.bic||''} · Steuernummer: ${f.steuernr||'–'}`,PW/2,291,{align:'center'});
+  doc.text(`${f.name||''} · Kto.-Inh.: ${f.kontoinhaber||f.gf||''} · IBAN: ${f.iban||''} · ${f.bic||''} · StNr: ${f.steuernr||'–'}`,PW/2,291,{align:'center'});
   doc.save(`EÜR_${j}_neuverdrahtet.pdf`);
 }
 
@@ -935,6 +964,7 @@ function gmailRestoreSession(){
       if(email)GMAIL.userEmail=email;
       googleConnected=true;
       updateGoogleStatus();
+      gmailLoadAllLabels(); // load labels in background
       return true;
     }
   }catch(e){}
@@ -992,9 +1022,10 @@ function onGoogleToken(resp){
   GMAIL.loaded=true;
   googleConnected=true;
   gmailSaveSession(resp.access_token, resp.expires_in);
-  gmailGetProfile().then(()=>{
+  gmailGetProfile().then(async ()=>{
     sessionStorage.setItem('nv_google_email', GMAIL.userEmail);
     updateGoogleStatus();
+    await gmailLoadAllLabels();
     gmailLoadThreads();
   });
 }
@@ -1023,18 +1054,33 @@ async function gmailPost(url,body){
 
 async function gmailGetProfile(){const d=await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/profile');if(d)GMAIL.userEmail=d.emailAddress||'';}
 
+async function gmailLoadAllLabels(){
+  if(GMAIL.allLabels && GMAIL.allLabels.length) return;
+  const d = await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/labels');
+  if(!d) return;
+  GMAIL.allLabels = (d.labels||[]).sort((a,b)=>{
+    // System labels first, then user labels alphabetically
+    const sys=['INBOX','STARRED','SENT','DRAFT','SPAM','TRASH'];
+    const ai=sys.indexOf(a.id), bi=sys.indexOf(b.id);
+    if(ai>=0&&bi>=0) return ai-bi;
+    if(ai>=0) return -1;
+    if(bi>=0) return 1;
+    return a.name.localeCompare(b.name,'de');
+  });
+}
+
 async function gmailLoadThreads(label='INBOX',q=''){
   GMAIL.curLabel=label;GMAIL.searchQ=q;
   const listEl=document.getElementById('email_list');
   if(listEl)listEl.innerHTML='<div style="padding:30px;text-align:center;color:var(--t3)">⏳ Lade...</div>';
-  let url=`https://www.googleapis.com/gmail/v1/users/me/threads?maxResults=25${q?'&q='+encodeURIComponent(q):'&labelIds='+label}`;
+  let url=`https://www.googleapis.com/gmail/v1/users/me/threads?maxResults=30${q?'&q='+encodeURIComponent(q):'&labelIds='+label}`;
   const d=await gmailFetch(url);
   if(!d){renderEmail();return;}
   const list=d.threads||[];
-  const details=await Promise.all(list.slice(0,25).map(t=>gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/threads/${t.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date&metadataHeaders=To`)));
+  const details=await Promise.all(list.slice(0,30).map(t=>gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/threads/${t.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date&metadataHeaders=To`)));
   GMAIL.threads=details.filter(Boolean);
   if(document.getElementById('email_list'))renderEmailList();
-  else{renderEmail();}
+  else renderEmail();
 }
 
 async function gmailOpenThread(threadId){
@@ -1048,13 +1094,31 @@ async function gmailOpenThread(threadId){
 }
 
 async function gmailSend(to,subject,body,threadId=null,msgId=null){
-  let raw=`To: ${to}\r\nFrom: ${GMAIL.userEmail}\r\nSubject: =?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=\r\nContent-Type: text/html; charset=utf-8\r\n`;
-  if(threadId&&msgId){raw+=`In-Reply-To: ${msgId}\r\nReferences: ${msgId}\r\n`;}
-  raw+=`\r\n${body}`;
-  const encoded=btoa(unescape(encodeURIComponent(raw))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-  const payload={raw:encoded};if(threadId)payload.threadId=threadId;
-  const r=await gmailPost('https://www.googleapis.com/gmail/v1/users/me/messages/send',payload);
-  return !!r;
+  try{
+    // Build RFC 2822 message
+    const boundary='nv_boundary_'+Date.now();
+    let raw='MIME-Version: 1.0\r\n';
+    raw+=`To: ${to}\r\n`;
+    raw+=`From: ${GMAIL.userEmail}\r\n`;
+    // Subject: encode UTF-8 base64
+    const subjEncoded=btoa(unescape(encodeURIComponent(subject)));
+    raw+=`Subject: =?utf-8?B?${subjEncoded}?=\r\n`;
+    raw+=`Content-Type: text/html; charset=utf-8\r\n`;
+    if(threadId&&msgId){
+      raw+=`In-Reply-To: ${msgId}\r\n`;
+      raw+=`References: ${msgId}\r\n`;
+    }
+    raw+=`\r\n`;
+    raw+=body;
+    // Encode to base64url
+    const encoded=btoa(unescape(encodeURIComponent(raw)))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    const payload={raw:encoded};
+    if(threadId)payload.threadId=threadId;
+    const r=await gmailPost('https://www.googleapis.com/gmail/v1/users/me/messages/send',payload);
+    if(r) return true;
+    console.error('Send failed');return false;
+  }catch(e){console.error('gmailSend error:',e);return false;}
 }
 
 async function gmailTrash(threadId){
@@ -1119,18 +1183,28 @@ function renderEmailLogin(){
 
 
 function renderEmailList(){
-  const LABELS=[{id:'INBOX',ic:'📥',lb:'Posteingang'},{id:'STARRED',ic:'⭐',lb:'Markiert'},{id:'SENT',ic:'📤',lb:'Gesendet'},{id:'DRAFT',ic:'📝',lb:'Entwürfe'},{id:'SPAM',ic:'🚫',lb:'Spam'},{id:'TRASH',ic:'🗑️',lb:'Papierkorb'}];
+  const SYS_LABELS=[{id:'INBOX',ic:'📥',lb:'Posteingang'},{id:'STARRED',ic:'⭐',lb:'Markiert'},{id:'SENT',ic:'📤',lb:'Gesendet'},{id:'DRAFT',ic:'📝',lb:'Entwürfe'},{id:'SPAM',ic:'🚫',lb:'Spam'},{id:'TRASH',ic:'🗑️',lb:'Papierkorb'}];
   const unread=GMAIL.threads.filter(isUnread).length;
+  // Build label list: system + user labels (subfolders)
+  const allL = GMAIL.allLabels||[];
+  const userLabels = allL.filter(l=>l.type==='user');
+  const labelHTML = [
+    ...SYS_LABELS.map(l=>`<div onclick="gmailLoadThreads('${l.id}')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${GMAIL.curLabel===l.id?700:500};color:${GMAIL.curLabel===l.id?'var(--navy3)':'var(--t2)'};background:${GMAIL.curLabel===l.id?'#fff':'transparent'};margin-bottom:1px">
+        <span>${l.ic}</span><span style="flex:1">${l.lb}</span>
+        ${l.id==='INBOX'&&unread>0?`<span style="background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px">${unread}</span>`:''}
+      </div>`),
+    userLabels.length ? '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);padding:10px 10px 3px">Ordner</div>' : '',
+    ...userLabels.map(l=>`<div onclick="gmailLoadThreads('${l.id}')" title="${esc(l.name)}" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${GMAIL.curLabel===l.id?700:500};color:${GMAIL.curLabel===l.id?'var(--navy3)':'var(--t2)'};background:${GMAIL.curLabel===l.id?'#fff':'transparent'};margin-bottom:1px;padding-left:${l.name.includes('/')?'18px':'10px'}">
+        <span>📁</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.name.includes('/')?l.name.split('/').pop():l.name)}</span>
+      </div>`)
+  ].join('');
   document.getElementById('content').innerHTML=`
-  <div style="display:grid;grid-template-columns:190px 1fr;height:calc(100vh - 104px);background:#fff;border-radius:14px;border:1px solid var(--border);overflow:hidden;box-shadow:var(--sh)">
+  <div style="display:grid;grid-template-columns:210px 1fr;height:calc(100vh - 104px);background:#fff;border-radius:14px;border:1px solid var(--border);overflow:hidden;box-shadow:var(--sh)">
     <!-- SIDEBAR -->
     <div style="background:#F4F7FB;border-right:1px solid var(--border);display:flex;flex-direction:column">
       <div style="padding:12px 10px"><button class="btn bg2" style="width:100%;justify-content:center;font-size:12px" onclick="openCompose()">✏️ Neue E-Mail</button></div>
       <div style="padding:0 6px;flex:1;overflow-y:auto">
-        ${LABELS.map(l=>`<div onclick="gmailLoadThreads('${l.id}')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${GMAIL.curLabel===l.id?700:500};color:${GMAIL.curLabel===l.id?'var(--navy3)':'var(--t2)'};background:${GMAIL.curLabel===l.id?'#fff':'transparent'};margin-bottom:1px;transition:background .12s">
-          <span>${l.ic}</span><span style="flex:1">${l.lb}</span>
-          ${l.id==='INBOX'&&unread>0?`<span style="background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px">${unread}</span>`:''}
-        </div>`).join('')}
+        ${labelHTML}
       </div>
       <div style="padding:10px;border-top:1px solid var(--border)">
         <div style="font-size:10px;color:var(--t3);margin-bottom:6px;word-break:break-all">${GMAIL.userEmail}</div>
@@ -1307,6 +1381,70 @@ function saveEmailAsAnfrage(threadId){
   if(DB.anfragen.find(a=>a.betreff===subject)){alert('Bereits als Anfrage gespeichert.');return;}
   DB.anfragen.push({id:uid(),datum:today(),kunde:senderName,betreff:subject,gewerk:'Sonstiges',weg:'E-Mail',status:'neu',notiz:`Von: ${senderEmail}\n\n${t.snippet||''}`});
   save();alert(`✓ Als Anfrage gespeichert:\n"${subject}"`);
+}
+
+// ══════════════════════════════════════════════
+// GOOGLE CALENDAR SYNC
+// ══════════════════════════════════════════════
+async function calendarSync(){
+  if(!GMAIL.token){alert('Bitte zuerst mit Google anmelden.');gmailAuth();return;}
+  const btn=document.getElementById('cal_sync_btn');
+  if(btn){btn.textContent='⏳ Synchronisiere...';btn.disabled=true;}
+  try{
+    // Load events for next 60 days
+    const now=new Date();
+    const future=new Date(now.getTime()+60*24*60*60*1000);
+    const url=`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${now.toISOString()}&timeMax=${future.toISOString()}&singleEvents=true&orderBy=startTime&maxResults=100`;
+    const d=await gmailFetch(url);
+    if(!d||!d.items){if(btn){btn.textContent='📅 Google Kalender sync';btn.disabled=false;}return;}
+    let imported=0;
+    d.items.forEach(ev=>{
+      const start=ev.start?.dateTime||ev.start?.date;
+      const end=ev.end?.dateTime||ev.end?.date;
+      const datum=start?new Date(start).toLocaleDateString('de-DE'):'';
+      const uhrzeit=start&&start.includes('T')?new Date(start).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'';
+      // Check if already exists
+      if(DB.termine.find(t=>t.gcal_id===ev.id))return;
+      DB.termine.push({
+        id:uid(), gcal_id:ev.id,
+        titel:ev.summary||'(kein Titel)',
+        datum, uhrzeit,
+        bis:end&&end.includes('T')?new Date(end).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'',
+        typ:'Kundentermin',
+        ort:ev.location||'',
+        notiz:ev.description||'',
+        kunde:'', ma:''
+      });
+      imported++;
+    });
+    if(imported>0){await save();}
+    if(btn){btn.textContent='✅ Synchronisiert ('+imported+' neu)';btn.disabled=false;}
+    setTimeout(()=>{if(btn){btn.textContent='📅 Google Kalender sync';btn.disabled=false;}},3000);
+    if(imported>0)renderKalender();
+  }catch(e){
+    console.error('Calendar sync error:',e);
+    if(btn){btn.textContent='❌ Fehler';btn.disabled=false;}
+    setTimeout(()=>{if(btn){btn.textContent='📅 Google Kalender sync';btn.disabled=false;}},3000);
+  }
+}
+
+async function calendarAddEvent(termin){
+  if(!GMAIL.token)return;
+  try{
+    const d=termin.datum.split('.');
+    const dateStr=d[2]+'-'+d[1].padStart(2,'0')+'-'+d[0].padStart(2,'0');
+    const startDT=termin.uhrzeit?`${dateStr}T${termin.uhrzeit}:00`:dateStr;
+    const endDT=termin.bis?`${dateStr}T${termin.bis}:00`:termin.uhrzeit?`${dateStr}T${termin.uhrzeit.split(':')[0].padStart(2,'0')}:${(+termin.uhrzeit.split(':')[1]+60)%60}`:dateStr;
+    const event={
+      summary:termin.titel,
+      location:termin.ort||'',
+      description:termin.notiz||'',
+      start:termin.uhrzeit?{dateTime:startDT,timeZone:'Europe/Berlin'}:{date:dateStr},
+      end:termin.bis?{dateTime:endDT,timeZone:'Europe/Berlin'}:{date:dateStr},
+    };
+    const r=await gmailPost('https://www.googleapis.com/calendar/v3/calendars/primary/events',event);
+    return r?.id;
+  }catch(e){console.error('calendarAddEvent:',e);return null;}
 }
 
 // ═══════════════════════════════════════════
@@ -1654,7 +1792,7 @@ function renderEinst(){
     </div></div>
   </div>
   <div class="card"><div class="ct" style="margin-bottom:14px">Firmenstammdaten</div><div class="g3">
-    ${[['name','Firmenname (vollständig)'],['kurz','Kurzname'],['gf','Geschäftsführer'],['strasse','Straße & Hausnr.'],['plzort','PLZ & Ort'],['tel','Telefon'],['email','E-Mail'],['web','Website'],['steuernr','Steuernummer'],['ust','USt-IdNr.'],['hrb','HRB / Registergericht'],['iban','IBAN'],['bic','BIC / Bank']].map(([k,lbl])=>`<div class="f"><label>${lbl}</label><input value="${esc(f[k]||'')}" onchange="DB.firma['${k}']=this.value;save()"></div>`).join('')}
+    ${[['name','Firmenname (vollständig)'],['kurz','Kurzname'],['gf','Geschäftsführer'],['strasse','Straße & Hausnr.'],['plzort','PLZ & Ort'],['tel','Telefon'],['email','E-Mail'],['web','Website'],['steuernr','Steuernummer'],['ust','USt-IdNr.'],['hrb','HRB / Registergericht'],['iban','IBAN'],['bic','BIC / Bank'],['kontoinhaber','Kontoinhaber']].map(([k,lbl])=>`<div class="f"><label>${lbl}</label><input value="${esc(f[k]||'')}" onchange="DB.firma['${k}']=this.value;save()"></div>`).join('')}
   </div>
   <div class="div"></div>
   <div class="g2">
@@ -2055,7 +2193,7 @@ function makePDF(d,type){
   doc.setFillColor(...cN);doc.rect(0,283,PW,14,'F');
   doc.setFillColor(...cG);doc.rect(0,283,PW,1.5,'F');
   doc.setTextColor(170,190,215);doc.setFontSize(7);doc.setFont('helvetica','normal');
-  doc.text(`${f.name||''} · GF: ${f.gf||''} · ${f.steuernr?'StNr: '+f.steuernr+' · ':''}IBAN: ${f.iban||''} · ${f.bic||''}`,PW/2,291,{align:'center'});
+  doc.text(`${f.name||''} · GF: ${f.gf||''} · ${f.steuernr?'StNr: '+f.steuernr+' · ':''}Kto.-Inh.: ${f.kontoinhaber||f.gf||''} · IBAN: ${f.iban||''} · ${f.bic||''}`,PW/2,291,{align:'center'});
   doc.save(`${typLabel}_${d.nr||'dok'}.pdf`);
 }
 

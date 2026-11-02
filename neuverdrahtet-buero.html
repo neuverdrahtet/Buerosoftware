@@ -2116,18 +2116,77 @@ function renderPlantafel(){
     </div>
   </div>`;
 }
+let zeitTimer=null,zeitTimerInterval=null,zeitFilter='diesesMonat';
+function zeitDate(s){return s?new Date(s.split('.').reverse().join('-')):null;}
+function zeitFilterPredicate(){
+  const now=new Date(),heute=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  if(zeitFilter==='alle')return()=>true;
+  if(zeitFilter==='heute')return z=>{const d=zeitDate(z.datum);return d&&d.getTime()===heute.getTime();};
+  if(zeitFilter==='7tage'){const ab=new Date(heute);ab.setDate(ab.getDate()-7);return z=>{const d=zeitDate(z.datum);return d&&d>=ab;};}
+  if(zeitFilter==='30tage'){const ab=new Date(heute);ab.setDate(ab.getDate()-30);return z=>{const d=zeitDate(z.datum);return d&&d>=ab;};}
+  if(zeitFilter==='letzterMonat'){const m=now.getMonth()-1,j=m<0?now.getFullYear()-1:now.getFullYear(),mm=(m+12)%12;return z=>{const d=zeitDate(z.datum);return d&&d.getMonth()===mm&&d.getFullYear()===j;};}
+  return z=>{const d=zeitDate(z.datum);return d&&d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();};
+}
+function setZeitFilter(f){zeitFilter=f;renderZeit();}
+function setZeitStatus(id,status){const z=DB.zeitbuchungen.find(x=>x.id===id);if(z){z.status=status;save();renderZeit();}}
+function startZeitTimer(){
+  const ma=gv('ze_t_ma'),proj=gv('ze_t_proj');
+  if(!ma){alert('Bitte Mitarbeiter wählen.');return;}
+  zeitTimer={start:Date.now(),ma,proj};
+  renderZeit();
+}
+function stopZeitTimer(){
+  if(!zeitTimer)return;
+  const std=(Date.now()-zeitTimer.start)/3600000;
+  DB.zeitbuchungen.push({id:uid(),ma:zeitTimer.ma,datum:today(),projekt:zeitTimer.proj,taetigkeit:'',von:'',bis:'',stunden:std.toFixed(2),bemerkung:'',status:'Eingereicht'});
+  zeitTimer=null;clearInterval(zeitTimerInterval);zeitTimerInterval=null;
+  save();renderZeit();
+}
+function tickZeitTimer(){
+  const el=document.getElementById('zeit_timer_display');
+  if(!el||!zeitTimer)return;
+  const s=Math.floor((Date.now()-zeitTimer.start)/1000);
+  el.textContent=`${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor(s%3600/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+}
 function renderZeit(){
+  if(zeitTimerInterval){clearInterval(zeitTimerInterval);zeitTimerInterval=null;}
   const maOpts=DB.mitarbeiter.map(m=>`<option>${esc(m)}</option>`).join('');
   const projOpts=DB.projekte.map(p=>`<option>${esc(p.name)}</option>`).join('');
-  const total=DB.zeitbuchungen.reduce((s,z)=>s+(+z.stunden||0),0);
-  const rows=DB.zeitbuchungen.slice().reverse().map(z=>`<tr>
+  const gefiltert=DB.zeitbuchungen.filter(zeitFilterPredicate());
+  const total=gefiltert.reduce((s,z)=>s+(+z.stunden||0),0);
+  const cnt=st=>gefiltert.filter(z=>(z.status||'Eingereicht')===st).length;
+  const filterChips=[['heute','Heute'],['7tage','Letzte 7 Tage'],['30tage','Letzte 30 Tage'],['letzterMonat','Letzter Monat'],['diesesMonat','Dieser Monat']];
+  const rows=gefiltert.slice().reverse().map(z=>{
+    const st=z.status||'Eingereicht';
+    return`<tr>
     <td>${esc(z.datum)}</td><td style="font-weight:600">${esc(z.ma)}</td><td>${esc(z.projekt||'–')}</td>
-    <td>${esc(z.taetigkeit||'–')}</td><td>${esc(z.von)} – ${esc(z.bis)}</td>
+    <td>${esc(z.taetigkeit||'–')}</td><td>${z.von&&z.bis?esc(z.von)+' – '+esc(z.bis):'–'}</td>
     <td style="font-weight:700;color:var(--navy)">${esc(z.stunden)} h</td>
-    <td><button class="bic" onclick="delIt('zeitbuchungen','${z.id}')">🗑️</button></td></tr>`).join('');
+    <td><span class="bdg ${st==='Genehmigt'?'bg-g':st==='Eingereicht'?'bg-o':'bg-gr'}">${st}</span></td>
+    <td><div style="display:flex;gap:3px">${st!=='Genehmigt'?`<button class="bic" onclick="setZeitStatus('${z.id}','Genehmigt')" title="Genehmigen">✓</button>`:''}<button class="bic" onclick="delIt('zeitbuchungen','${z.id}')">🗑️</button></div></td></tr>`;
+  }).join('');
   document.getElementById('content').innerHTML=`
-  <div class="g2" style="margin-bottom:14px">
-    <div class="card"><div class="ct" style="margin-bottom:12px">Neue Zeitbuchung</div><div class="g2">
+  <div class="card" style="margin-bottom:14px">
+    <div class="ct" style="margin-bottom:12px">Zeiteinträge</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <select id="ze_t_ma" style="max-width:180px">${maOpts}</select>
+      <select id="ze_t_proj" style="max-width:220px"><option value="">Kein Projekt</option>${projOpts}</select>
+      ${zeitTimer?`<span id="zeit_timer_display" style="font-size:18px;font-weight:800;color:var(--navy3);min-width:80px">00:00:00</span><button class="btn br" onclick="stopZeitTimer()">⏹ Stopp</button>`
+        :`<button class="btn bg2" onclick="startZeitTimer()">▶ Starten</button>`}
+    </div>
+  </div>
+  <div class="sg" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px">
+    <div class="sc"><div class="sc-val">${total.toFixed(1)}h</div><div class="sc-lbl">Gesamtzeit</div></div>
+    <div class="sc"><div class="sc-val">${cnt('Entwurf')}</div><div class="sc-lbl">Entwürfe</div></div>
+    <div class="sc"><div class="sc-val">${cnt('Eingereicht')}</div><div class="sc-lbl">Eingereicht</div></div>
+    <div class="sc"><div class="sc-val">${cnt('Genehmigt')}</div><div class="sc-lbl">Genehmigt</div></div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${filterChips.map(([v,l])=>`<button class="btn ${zeitFilter===v?'bg2':'bo'} bsm" onclick="setZeitFilter('${v}')">${l}</button>`).join('')}
+    </div>
+  </div>
+  <div class="card"><div class="card-hd"><span class="ct">Manueller Eintrag</span></div><div class="g2">
       <div class="f"><label>Mitarbeiter</label><select id="ze_ma">${maOpts}</select></div>
       <div class="f"><label>Datum</label><input type="date" id="ze_dat" value="${new Date().toISOString().slice(0,10)}"></div>
       <div class="f"><label>Projekt</label><select id="ze_proj"><option value="">– kein –</option>${projOpts}</select></div>
@@ -2137,21 +2196,15 @@ function renderZeit(){
       <div class="f"><label>Pause (Min.)</label><input type="number" id="ze_pau" value="30"></div>
       <div class="f"><label>Bemerkung</label><input id="ze_bem"></div>
     </div><button class="btn bg2" style="margin-top:12px;width:100%" onclick="addZeit()">⏱ Buchen</button></div>
-    <div class="card" style="text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center">
-      <div style="font-size:52px;font-weight:900;color:var(--navy3)">${total.toFixed(1)}</div>
-      <div style="font-size:14px;color:var(--t2);font-weight:600">Stunden gesamt</div>
-      <div style="width:60px;height:3px;background:linear-gradient(90deg,var(--gold),var(--gold2));border-radius:3px;margin:12px auto"></div>
-      <div style="font-size:12px;color:var(--t3)">${DB.zeitbuchungen.length} Buchungen · ${DB.mitarbeiter.length} Mitarbeiter</div>
-    </div>
-  </div>
-  <div class="card"><div class="ct" style="margin-bottom:12px">Zeitbuchungen</div>
-    <table class="dt"><thead><tr><th>Datum</th><th>Mitarbeiter</th><th>Projekt</th><th>Tätigkeit</th><th>Zeit</th><th>Std.</th><th></th></tr></thead>
-    <tbody>${rows||'<tr><td colspan="7" style="color:var(--t3);padding:16px">Keine Buchungen</td></tr>'}</tbody></table></div>`;
+  <div class="card" style="margin-top:14px"><div class="ct" style="margin-bottom:12px">Zeitbuchungen</div>
+    <table class="dt"><thead><tr><th>Datum</th><th>Mitarbeiter</th><th>Projekt</th><th>Tätigkeit</th><th>Zeit</th><th>Std.</th><th>Status</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="8" style="color:var(--t3);padding:16px">Keine Buchungen</td></tr>'}</tbody></table></div>`;
+  if(zeitTimer){tickZeitTimer();zeitTimerInterval=setInterval(tickZeitTimer,1000);}
 }
 function addZeit(){
   const von=gv('ze_von'),bis=gv('ze_bis'),pau=parseFloat(gv('ze_pau'))||0;
   let std=0;if(von&&bis){const[vh,vm]=von.split(':').map(Number);const[bh,bm]=bis.split(':').map(Number);std=Math.max(0,(bh*60+bm-vh*60-vm-pau)/60);}
-  DB.zeitbuchungen.push({id:uid(),ma:gv('ze_ma'),datum:gv('ze_dat'),projekt:gv('ze_proj'),taetigkeit:gv('ze_tat'),von,bis,stunden:std.toFixed(2),bemerkung:gv('ze_bem')});
+  DB.zeitbuchungen.push({id:uid(),ma:gv('ze_ma'),datum:gv('ze_dat'),projekt:gv('ze_proj'),taetigkeit:gv('ze_tat'),von,bis,stunden:std.toFixed(2),bemerkung:gv('ze_bem'),status:'Eingereicht'});
   save();renderZeit();
 }
 

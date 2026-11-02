@@ -251,6 +251,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);background:#fff
   <div class="ni" onclick="pg('notizbuch')"><span class="ic">📓</span>Notizbuch</div>
   <div class="sb-sec">System</div>
   <div class="ni" onclick="pg('einstellungen')"><span class="ic">🏢</span>Firmendaten</div>
+  <div class="ni" onclick="pg('organisation')"><span class="ic">⚙️</span>Organisation</div>
   <div class="ni" onclick="pg('email')"><span class="ic">📧</span>E-Mail (Gmail)</div>
   <div class="ni" onclick="pg('chats')"><span class="ic">💬</span>Chats</div>
   <div class="ni" onclick="pg('integrationen')"><span class="ic">🔗</span>Integrationen</div>
@@ -299,7 +300,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);background:#fff
 // DATABASE
 // ════════════════════════════════════════════════════
 const DB={
-  kunden:[],anfragen:[],projekte:[],auftraege:[],objekte:[],wartungsvertraege:[],aufgaben:[],notizen:[],rubriken:[],dokumente:[],chatnachrichten:[],verlustgruende:['Preis','Zeitplan','Konkurrenzangebot gewählt','Projekt verschoben/storniert','Keine Rückmeldung'],wartungsformulare:[],
+  kunden:[],anfragen:[],projekte:[],auftraege:[],objekte:[],wartungsvertraege:[],aufgaben:[],notizen:[],rubriken:[],dokumente:[],chatnachrichten:[],verlustgruende:['Preis','Zeitplan','Konkurrenzangebot gewählt','Projekt verschoben/storniert','Keine Rückmeldung'],wartungsformulare:[],teams:[],ressourcen:[],datenfelder:[],sichtbareBereiche:{},formulare:[],zahlungsbedingungen:[{id:'standard',name:'14 Tage netto',tage:14,standard:true}],textbausteine:[],
   material:[],leistungen:[],angebote:[],ab:[],rechnungen:[],
   abschlag:[],lieferschein:[],mahnungen:[],zeitbuchungen:[],plantafel:[],
   buchhaltung:[],termine:[],mitarbeiter:['Danny Berger'],
@@ -540,7 +541,7 @@ const stat=(arr,cur)=>arr.map(s=>`<option${cur===s?' selected':''}>${s}</option>
 // ════════════════════════════════════════════════════
 // NAVIGATION
 // ════════════════════════════════════════════════════
-const TITLES={dashboard:'Dashboard',kalender:'Kalender',projekte_kanban:'Projekte',objekte:'Objekte',wartung:'Wartung',zeitadmin:'Zeit-Admin',aufgaben:'Termine & Aufgaben',datenablage:'Datenablage',notizbuch:'Notizbuch',chats:'Chats',angebote:'Angebote',ab:'Auftragsbestätigungen',rechnungen:'Rechnungen',abschlag:'Abschlagsrechnungen',lieferschein:'Lieferscheine',mahnungen:'Mahnungen',buchhaltung:'Buchhaltung',steuer:'Steuerberater-Export',kunden:'Kunden',anfragen:'Kundenanfragen',auftraege:'Aufträge',material:'Materialstamm',leistungen:'Leistungskatalog',plantafel:'Plantafel',zeiterfassung:'Zeiterfassung',einstellungen:'Firmendaten',integrationen:'Integrationen',email:'E-Mail (Gmail)'};
+const TITLES={dashboard:'Dashboard',kalender:'Kalender',projekte_kanban:'Projekte',objekte:'Objekte',wartung:'Wartung',zeitadmin:'Zeit-Admin',aufgaben:'Termine & Aufgaben',datenablage:'Datenablage',notizbuch:'Notizbuch',chats:'Chats',organisation:'Organisation',angebote:'Angebote',ab:'Auftragsbestätigungen',rechnungen:'Rechnungen',abschlag:'Abschlagsrechnungen',lieferschein:'Lieferscheine',mahnungen:'Mahnungen',buchhaltung:'Buchhaltung',steuer:'Steuerberater-Export',kunden:'Kunden',anfragen:'Kundenanfragen',auftraege:'Aufträge',material:'Materialstamm',leistungen:'Leistungskatalog',plantafel:'Plantafel',zeiterfassung:'Zeiterfassung',einstellungen:'Firmendaten',integrationen:'Integrationen',email:'E-Mail (Gmail)'};
 let curPage='dashboard';
 
 function pg(name){
@@ -558,7 +559,7 @@ function pg(name){
 }
 
 function renderPage(n){
-  const fns={dashboard:renderDash,kalender:renderKalender,projekte_kanban:renderKanban,objekte:renderObjekte,wartung:renderWartung,zeitadmin:renderZeitAdmin,aufgaben:renderAufgaben,datenablage:renderDatenablage,notizbuch:renderNotizbuch,chats:renderChats,kunden:renderKunden,anfragen:renderAnfragen,auftraege:renderAuftraege,material:renderMaterial,leistungen:renderLeistungen,plantafel:renderPlantafel,zeiterfassung:renderZeit,buchhaltung:renderBuchhaltung,steuer:renderSteuer,einstellungen:renderEinst,integrationen:renderIntegrationen,email:renderEmail};
+  const fns={dashboard:renderDash,kalender:renderKalender,projekte_kanban:renderKanban,objekte:renderObjekte,wartung:renderWartung,zeitadmin:renderZeitAdmin,aufgaben:renderAufgaben,datenablage:renderDatenablage,notizbuch:renderNotizbuch,chats:renderChats,organisation:renderOrganisation,kunden:renderKunden,anfragen:renderAnfragen,auftraege:renderAuftraege,material:renderMaterial,leistungen:renderLeistungen,plantafel:renderPlantafel,zeiterfassung:renderZeit,buchhaltung:renderBuchhaltung,steuer:renderSteuer,einstellungen:renderEinst,integrationen:renderIntegrationen,email:renderEmail};
   if(fns[n])fns[n]();
   else if(['angebote','ab','rechnungen','abschlag','lieferschein','mahnungen'].includes(n))renderDokList(n);
 }
@@ -2358,6 +2359,17 @@ function dropPlantafelCell(e,ma,datum){
   const proj=e.dataTransfer.getData('queueProjekt');
   if(proj){DB.plantafel.push({id:uid(),ma,datum,typ:'Auftrag',von:'07:00',bis:'16:00',projekt:proj});save();renderPlantafel();}
 }
+function dropPlantafelTeamCell(e,team,datum){
+  e.preventDefault();
+  const proj=e.dataTransfer.getData('queueProjekt');
+  if(proj){DB.plantafel.push({id:uid(),team,datum,typ:'Auftrag',projekt:proj});save();renderPlantafel();}
+}
+function dropPlantafelRessCell(e,ressource,datum){
+  e.preventDefault();
+  const proj=e.dataTransfer.getData('queueProjekt');
+  if(proj){DB.plantafel.push({id:uid(),ressource,datum,typ:'Auftrag',projekt:proj});save();renderPlantafel();}
+}
+function delPlantafelEintrag(id){if(!confirm('Eintrag entfernen?'))return;DB.plantafel=DB.plantafel.filter(e=>e.id!==id);save();renderPlantafel();}
 function renderPlantafel(){
   const MON=['Mo','Di','Mi','Do','Fr','Sa','So'];
   const base=new Date();base.setDate(base.getDate()-base.getDay()+1+ptOffset*7);
@@ -2381,6 +2393,32 @@ function renderPlantafel(){
       grid+=`</div>`;
     });
   });
+  if(DB.teams.length){
+    grid+=`<div class="ptf-cell hd" style="grid-column:1/-1;background:#F4F7FB">Teams & Kolonnen</div>`;
+    DB.teams.forEach(t=>{
+      grid+=`<div class="ptf-cell ma-col">${esc(t.name)}</div>`;
+      days.forEach(d=>{
+        const ds=d.toISOString().slice(0,10);
+        const es=DB.plantafel.filter(e=>e.team===t.name&&e.datum===ds);
+        grid+=`<div class="ptf-cell" ondragover="allowDrop(event)" ondrop="dropPlantafelTeamCell(event,'${t.name.replace(/'/g,"\\'")}','${ds}')">`;
+        es.forEach(e=>grid+=`<span class="pe pe-a" onclick="delPlantafelEintrag('${e.id}')" title="Klicken zum Entfernen">${esc(e.projekt||'Auftrag')}</span>`);
+        grid+=`</div>`;
+      });
+    });
+  }
+  if(DB.ressourcen.filter(r=>r.status==='Aktiv').length){
+    grid+=`<div class="ptf-cell hd" style="grid-column:1/-1;background:#F4F7FB">Ressourcen</div>`;
+    DB.ressourcen.filter(r=>r.status==='Aktiv').forEach(r=>{
+      grid+=`<div class="ptf-cell ma-col">${esc(r.name)}</div>`;
+      days.forEach(d=>{
+        const ds=d.toISOString().slice(0,10);
+        const es=DB.plantafel.filter(e=>e.ressource===r.name&&e.datum===ds);
+        grid+=`<div class="ptf-cell" ondragover="allowDrop(event)" ondrop="dropPlantafelRessCell(event,'${r.name.replace(/'/g,"\\'")}','${ds}')">`;
+        es.forEach(e=>grid+=`<span class="pe pe-a" onclick="delPlantafelEintrag('${e.id}')" title="Klicken zum Entfernen">${esc(e.projekt||'Auftrag')}</span>`);
+        grid+=`</div>`;
+      });
+    });
+  }
   grid+='</div>';
   document.getElementById('content').innerHTML=`<div style="display:grid;grid-template-columns:240px 1fr;gap:14px;align-items:start">
     <div class="card">
@@ -2606,6 +2644,186 @@ function renderEinst(){
   </div>`;
 }
 function loadLogo(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{logoData=e.target.result;DB.firma.logo=logoData;save();renderEinst();};r.readAsDataURL(f);}
+
+// ════════════════════════════════════════════════════
+// ORGANISATION (Teams, Ressourcen, Zahlungsbedingungen,
+// Textbausteine, Datenfelder, Sichtbare Bereiche, Formulare)
+// ════════════════════════════════════════════════════
+const ORG_ROLLEN=['Monteur','Bauleiter','Bürokraft'];
+const ORG_BEREICHE=[['kalender','Kalender'],['projekte_kanban','Projekte'],['angebote','Angebote'],['rechnungen','Rechnungen'],['kunden','Kunden'],['anfragen','Kundenanfragen'],['auftraege','Aufträge'],['aufgaben','Termine & Aufgaben'],['objekte','Objekte'],['wartung','Wartung'],['material','Material'],['leistungen','Leistungen'],['plantafel','Plantafel'],['zeiterfassung','Zeiterfassung'],['zeitadmin','Zeit-Admin'],['datenablage','Datenablage'],['notizbuch','Notizbuch'],['chats','Chats'],['buchhaltung','Buchhaltung']];
+let orgTab='teams';
+function setOrgTab(t){orgTab=t;renderOrganisation();}
+function orgTabBtns(){
+  const tabs=[['teams','Teams'],['ressourcen','Ressourcen'],['zahlungsbedingungen','Zahlungsbedingungen'],['textbausteine','Textbausteine'],['datenfelder','Datenfelder'],['sichtbar','Sichtbare Bereiche'],['formulare','Formulare']];
+  return`<div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px;padding-bottom:10px;flex-wrap:wrap">
+    ${tabs.map(([v,l])=>`<button class="btn ${orgTab===v?'bg2':'bo'} bsm" onclick="setOrgTab('${v}')">${l}</button>`).join('')}
+  </div>`;
+}
+function orgWrap(title,inner){
+  document.getElementById('content').innerHTML=`<div class="card">
+    <div class="card-hd"><span class="ct">⚙️ Organisation</span></div>
+    ${orgTabBtns()}
+    ${inner}
+  </div>`;
+}
+
+// --- Teams ---
+function addTeam(){DB.teams.push({id:uid(),name:'Neues Team',mitglieder:[]});save();renderOrganisation();}
+function toggleTeamMitglied(teamId,ma){
+  const t=DB.teams.find(x=>x.id===teamId);if(!t)return;
+  t.mitglieder=t.mitglieder||[];
+  const i=t.mitglieder.indexOf(ma);
+  if(i>=0)t.mitglieder.splice(i,1);else t.mitglieder.push(ma);
+  save();renderOrganisation();
+}
+function renderOrgTeams(){
+  orgWrap('Teams',`
+    <div style="font-size:11px;color:var(--t3);margin-bottom:10px">Teams/Kolonnen für die Plantafel - fasst Mitarbeiter zu Einsatzgruppen zusammen.</div>
+    <button class="btn bg2 bsm" style="margin-bottom:14px" onclick="addTeam()">+ Team erstellen</button>
+    ${DB.teams.map(t=>`<div class="card" style="background:#FAFBFE;margin-bottom:10px">
+      <div class="card-hd">
+        <input value="${esc(t.name)}" onchange="DB.teams.find(x=>x.id==='${t.id}').name=this.value;save()" style="max-width:240px;font-weight:700">
+        <button class="bic" onclick="if(confirm('Team löschen?')){DB.teams=DB.teams.filter(x=>x.id!=='${t.id}');save();renderOrganisation();}">🗑️</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${DB.mitarbeiter.map(ma=>`<label style="display:flex;align-items:center;gap:4px;font-size:12px;background:${((t.mitglieder||[]).includes(ma))?'var(--blue-bg)':'#fff'};border:1px solid var(--border);border-radius:8px;padding:4px 8px;cursor:pointer">
+          <input type="checkbox" ${((t.mitglieder||[]).includes(ma))?'checked':''} onchange="toggleTeamMitglied('${t.id}','${ma.replace(/'/g,"\\'")}')">${esc(ma)}
+        </label>`).join('')}
+      </div>
+    </div>`).join('')||'<div style="color:var(--t3);font-size:12px">Noch keine Teams.</div>'}
+  `);
+}
+
+// --- Ressourcen ---
+let ressFilter='alle';
+function setRessFilter(f){ressFilter=f;renderOrganisation();}
+function addRessource(){DB.ressourcen.push({id:uid(),name:'Neue Ressource',typ:'Fahrzeug',status:'Aktiv'});save();renderOrganisation();}
+function renderOrgRessourcen(){
+  const liste=DB.ressourcen.filter(r=>ressFilter==='alle'?true:r.status===ressFilter);
+  orgWrap('Ressourcen',`
+    <div style="font-size:11px;color:var(--t3);margin-bottom:10px">Fahrzeuge, Maschinen und Werkzeug für die Plantafel.</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="btn ${ressFilter==='alle'?'bg2':'bo'} bsm" onclick="setRessFilter('alle')">Alle</button>
+      <button class="btn ${ressFilter==='Aktiv'?'bg2':'bo'} bsm" onclick="setRessFilter('Aktiv')">Aktiv</button>
+      <button class="btn ${ressFilter==='Wartung'?'bg2':'bo'} bsm" onclick="setRessFilter('Wartung')">Wartung</button>
+      <button class="btn ${ressFilter==='Inaktiv'?'bg2':'bo'} bsm" onclick="setRessFilter('Inaktiv')">Inaktiv</button>
+      <button class="btn bg2 bsm" style="margin-left:auto" onclick="addRessource()">+ Ressource hinzufügen</button>
+    </div>
+    <table class="dt"><thead><tr><th>Name</th><th>Typ</th><th>Status</th><th></th></tr></thead>
+    <tbody>${liste.map(r=>`<tr>
+      <td><input value="${esc(r.name)}" onchange="DB.ressourcen.find(x=>x.id==='${r.id}').name=this.value;save()" style="border:none;background:none;font-weight:600;width:100%"></td>
+      <td><select onchange="DB.ressourcen.find(x=>x.id==='${r.id}').typ=this.value;save()">${stat(['Fahrzeug','Maschine','Werkzeug'],r.typ)}</select></td>
+      <td><select onchange="DB.ressourcen.find(x=>x.id==='${r.id}').status=this.value;save();renderOrganisation()">${stat(['Aktiv','Wartung','Inaktiv'],r.status)}</select></td>
+      <td><button class="bic" onclick="DB.ressourcen=DB.ressourcen.filter(x=>x.id!=='${r.id}');save();renderOrganisation()">🗑️</button></td>
+    </tr>`).join('')||'<tr><td colspan="4" style="color:var(--t3);padding:16px">Keine Ressourcen.</td></tr>'}</tbody></table>
+  `);
+}
+
+// --- Zahlungsbedingungen ---
+function addZahlungsbedingung(){DB.zahlungsbedingungen.push({id:uid(),name:'Neue Bedingung',tage:14,standard:false});save();renderOrganisation();}
+function setStandardZahlung(id){DB.zahlungsbedingungen.forEach(z=>z.standard=(z.id===id));save();renderOrganisation();}
+function renderOrgZahlungsbedingungen(){
+  orgWrap('Zahlungsbedingungen',`
+    <div style="font-size:11px;color:var(--t3);margin-bottom:10px">Zahlungsbedingungen für Angebote und Rechnungen. Eine davon lässt sich als Standard markieren.</div>
+    <button class="btn bg2 bsm" style="margin-bottom:14px" onclick="addZahlungsbedingung()">+ Bedingung hinzufügen</button>
+    <table class="dt"><thead><tr><th>Bezeichnung</th><th>Tage</th><th>Standard</th><th></th></tr></thead>
+    <tbody>${DB.zahlungsbedingungen.map(z=>`<tr>
+      <td><input value="${esc(z.name)}" onchange="DB.zahlungsbedingungen.find(x=>x.id==='${z.id}').name=this.value;save()" style="border:none;background:none;font-weight:600;width:100%"></td>
+      <td><input type="number" value="${z.tage}" onchange="DB.zahlungsbedingungen.find(x=>x.id==='${z.id}').tage=+this.value||0;save()" style="width:70px"></td>
+      <td><input type="radio" name="org_zb_std" ${z.standard?'checked':''} onchange="setStandardZahlung('${z.id}')"></td>
+      <td><button class="bic" onclick="DB.zahlungsbedingungen=DB.zahlungsbedingungen.filter(x=>x.id!=='${z.id}');save();renderOrganisation()">🗑️</button></td>
+    </tr>`).join('')||'<tr><td colspan="4" style="color:var(--t3);padding:16px">Keine Zahlungsbedingungen.</td></tr>'}</tbody></table>
+  `);
+}
+
+// --- Textbausteine ---
+function addTextbaustein(){DB.textbausteine.push({id:uid(),name:'Neuer Textbaustein',kategorie:'Angebot',text:''});save();renderOrganisation();}
+function renderOrgTextbausteine(){
+  orgWrap('Textbausteine',`
+    <div style="font-size:11px;color:var(--t3);margin-bottom:10px">Wiederverwendbare Einleitungs-/Abschlusstexte. Zum Einfügen: Text markieren und in ein Dokumentfeld kopieren.</div>
+    <button class="btn bg2 bsm" style="margin-bottom:14px" onclick="addTextbaustein()">+ Textbaustein</button>
+    ${DB.textbausteine.map(tb=>`<div class="card" style="background:#FAFBFE;margin-bottom:10px">
+      <div class="card-hd">
+        <input value="${esc(tb.name)}" onchange="DB.textbausteine.find(x=>x.id==='${tb.id}').name=this.value;save()" style="max-width:220px;font-weight:700">
+        <div style="display:flex;gap:8px;align-items:center">
+          <select onchange="DB.textbausteine.find(x=>x.id==='${tb.id}').kategorie=this.value;save()">${stat(['Angebot','Auftragsbestätigung','Rechnung','Mahnung','Allgemein'],tb.kategorie)}</select>
+          <button class="bic" onclick="DB.textbausteine=DB.textbausteine.filter(x=>x.id!=='${tb.id}');save();renderOrganisation()">🗑️</button>
+        </div>
+      </div>
+      <textarea rows="3" style="width:100%" onchange="DB.textbausteine.find(x=>x.id==='${tb.id}').text=this.value;save()">${esc(tb.text||'')}</textarea>
+    </div>`).join('')||'<div style="color:var(--t3);font-size:12px">Noch keine Textbausteine.</div>'}
+  `);
+}
+
+// --- Datenfelder ---
+function addDatenfeld(){DB.datenfelder.push({id:uid(),name:'Neues Feld',typ:'Text'});save();renderOrganisation();}
+function renderOrgDatenfelder(){
+  orgWrap('Datenfelder',`
+    <div style="font-size:11px;color:var(--t3);margin-bottom:10px">Eigene Zusatzfelder für Kunden. Erscheinen als zusätzliche Eingabe im Kunden-Formular.</div>
+    <button class="btn bg2 bsm" style="margin-bottom:14px" onclick="addDatenfeld()">+ Feld hinzufügen</button>
+    <table class="dt"><thead><tr><th>Feldname</th><th>Typ</th><th></th></tr></thead>
+    <tbody>${DB.datenfelder.map(f=>`<tr>
+      <td><input value="${esc(f.name)}" onchange="DB.datenfelder.find(x=>x.id==='${f.id}').name=this.value;save()" style="border:none;background:none;font-weight:600;width:100%"></td>
+      <td><select onchange="DB.datenfelder.find(x=>x.id==='${f.id}').typ=this.value;save()">${stat(['Text','Zahl','Datum'],f.typ)}</select></td>
+      <td><button class="bic" onclick="DB.datenfelder=DB.datenfelder.filter(x=>x.id!=='${f.id}');save();renderOrganisation()">🗑️</button></td>
+    </tr>`).join('')||'<tr><td colspan="3" style="color:var(--t3);padding:16px">Keine Datenfelder.</td></tr>'}</tbody></table>
+  `);
+}
+
+// --- Sichtbare Bereiche ---
+let sichtbarRolle='Monteur';
+function setSichtbarRolle(r){sichtbarRolle=r;renderOrganisation();}
+function toggleSichtbarBereich(rolle,bereich){
+  DB.sichtbareBereiche[rolle]=DB.sichtbareBereiche[rolle]||{};
+  DB.sichtbareBereiche[rolle][bereich]=!(DB.sichtbareBereiche[rolle][bereich]!==false);
+  save();renderOrganisation();
+}
+function renderOrgSichtbar(){
+  const cfg=DB.sichtbareBereiche[sichtbarRolle]||{};
+  orgWrap('Sichtbare Bereiche',`
+    <div style="background:var(--orange-bg);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--t2);margin-bottom:14px">⚠️ Diese Einstellung wird gespeichert, wirkt sich aber noch nicht live aus: Die App hat aktuell nur einen einzelnen Firebase-Zugang ohne Mitarbeiter-Login, daher kann noch nicht unterschieden werden, wer gerade angemeldet ist. Das ist die Konfigurationsgrundlage für ein künftiges Mehrbenutzer-Rollensystem.</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      ${ORG_ROLLEN.map(r=>`<button class="btn ${sichtbarRolle===r?'bg2':'bo'} bsm" onclick="setSichtbarRolle('${r}')">${r}</button>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      ${ORG_BEREICHE.map(([key,label])=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
+        <input type="checkbox" ${cfg[key]!==false?'checked':''} onchange="toggleSichtbarBereich('${sichtbarRolle}','${key}')">${esc(label)}
+      </label>`).join('')}
+    </div>
+  `);
+}
+
+// --- Formulare (externe Lead-Formulare) ---
+function addFormular(){DB.formulare.push({id:uid(),name:'Neues Formular',felder:['Name','E-Mail','Nachricht']});save();renderOrganisation();}
+function updateFormularFelder(id,text){
+  const f=DB.formulare.find(x=>x.id===id);if(!f)return;
+  f.felder=text.split('\n').map(s=>s.trim()).filter(Boolean);
+  save();
+}
+function renderOrgFormulare(){
+  orgWrap('Formulare',`
+    <div style="background:var(--orange-bg);border-radius:10px;padding:10px 14px;font-size:11px;color:var(--t2);margin-bottom:14px">⚠️ Hier lässt sich nur der Aufbau eines Website-Formulars definieren. Eine Veröffentlichung, die anonym in die Firestore-Datenbank schreibt, wurde bewusst nicht eingerichtet - das erfordert eine eigene Prüfung der Firebase-Sicherheitsregeln, damit niemand Fremdes Daten einschleusen kann.</div>
+    <button class="btn bg2 bsm" style="margin-bottom:14px" onclick="addFormular()">+ Formular erstellen</button>
+    ${DB.formulare.map(f=>`<div class="card" style="background:#FAFBFE;margin-bottom:10px">
+      <div class="card-hd">
+        <input value="${esc(f.name)}" onchange="DB.formulare.find(x=>x.id==='${f.id}').name=this.value;save()" style="max-width:240px;font-weight:700">
+        <button class="bic" onclick="DB.formulare=DB.formulare.filter(x=>x.id!=='${f.id}');save();renderOrganisation()">🗑️</button>
+      </div>
+      <label style="font-size:11px;color:var(--t3)">Felder (ein Feldname pro Zeile)</label>
+      <textarea rows="3" style="width:100%" onchange="updateFormularFelder('${f.id}',this.value)">${esc((f.felder||[]).join('\n'))}</textarea>
+    </div>`).join('')||'<div style="color:var(--t3);font-size:12px">Noch keine Formulare.</div>'}
+  `);
+}
+
+function renderOrganisation(){
+  if(orgTab==='ressourcen')return renderOrgRessourcen();
+  if(orgTab==='zahlungsbedingungen')return renderOrgZahlungsbedingungen();
+  if(orgTab==='textbausteine')return renderOrgTextbausteine();
+  if(orgTab==='datenfelder')return renderOrgDatenfelder();
+  if(orgTab==='sichtbar')return renderOrgSichtbar();
+  if(orgTab==='formulare')return renderOrgFormulare();
+  return renderOrgTeams();
+}
 
 // ════════════════════════════════════════════════════
 // MODAL STAMMDATEN

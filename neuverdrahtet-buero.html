@@ -234,6 +234,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);background:#fff
   <div class="ni" onclick="pg('kunden')"><span class="ic">👥</span>Kunden</div>
   <div class="ni" onclick="pg('anfragen')"><span class="ic">📩</span>Kundenanfragen</div>
   <div class="ni" onclick="pg('auftraege')"><span class="ic">🔧</span>Aufträge</div>
+  <div class="ni" onclick="pg('objekte')"><span class="ic">🏢</span>Objekte</div>
   <div class="sb-sec">Ressourcen</div>
   <div class="ni" onclick="pg('material')"><span class="ic">🔩</span>Material</div>
   <div class="ni" onclick="pg('leistungen')"><span class="ic">⚙️</span>Leistungen</div>
@@ -288,7 +289,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);background:#fff
 // DATABASE
 // ════════════════════════════════════════════════════
 const DB={
-  kunden:[],anfragen:[],projekte:[],auftraege:[],
+  kunden:[],anfragen:[],projekte:[],auftraege:[],objekte:[],
   material:[],leistungen:[],angebote:[],ab:[],rechnungen:[],
   abschlag:[],lieferschein:[],mahnungen:[],zeitbuchungen:[],plantafel:[],
   buchhaltung:[],termine:[],mitarbeiter:['Danny Berger'],
@@ -529,7 +530,7 @@ const stat=(arr,cur)=>arr.map(s=>`<option${cur===s?' selected':''}>${s}</option>
 // ════════════════════════════════════════════════════
 // NAVIGATION
 // ════════════════════════════════════════════════════
-const TITLES={dashboard:'Dashboard',kalender:'Kalender',projekte_kanban:'Projekte',angebote:'Angebote',ab:'Auftragsbestätigungen',rechnungen:'Rechnungen',abschlag:'Abschlagsrechnungen',lieferschein:'Lieferscheine',mahnungen:'Mahnungen',buchhaltung:'Buchhaltung',steuer:'Steuerberater-Export',kunden:'Kunden',anfragen:'Kundenanfragen',auftraege:'Aufträge',material:'Materialstamm',leistungen:'Leistungskatalog',plantafel:'Plantafel',zeiterfassung:'Zeiterfassung',einstellungen:'Firmendaten',integrationen:'Integrationen',email:'E-Mail (Gmail)'};
+const TITLES={dashboard:'Dashboard',kalender:'Kalender',projekte_kanban:'Projekte',objekte:'Objekte',angebote:'Angebote',ab:'Auftragsbestätigungen',rechnungen:'Rechnungen',abschlag:'Abschlagsrechnungen',lieferschein:'Lieferscheine',mahnungen:'Mahnungen',buchhaltung:'Buchhaltung',steuer:'Steuerberater-Export',kunden:'Kunden',anfragen:'Kundenanfragen',auftraege:'Aufträge',material:'Materialstamm',leistungen:'Leistungskatalog',plantafel:'Plantafel',zeiterfassung:'Zeiterfassung',einstellungen:'Firmendaten',integrationen:'Integrationen',email:'E-Mail (Gmail)'};
 let curPage='dashboard';
 
 function pg(name){
@@ -547,7 +548,7 @@ function pg(name){
 }
 
 function renderPage(n){
-  const fns={dashboard:renderDash,kalender:renderKalender,projekte_kanban:renderKanban,kunden:renderKunden,anfragen:renderAnfragen,auftraege:renderAuftraege,material:renderMaterial,leistungen:renderLeistungen,plantafel:renderPlantafel,zeiterfassung:renderZeit,buchhaltung:renderBuchhaltung,steuer:renderSteuer,einstellungen:renderEinst,integrationen:renderIntegrationen,email:renderEmail};
+  const fns={dashboard:renderDash,kalender:renderKalender,projekte_kanban:renderKanban,objekte:renderObjekte,kunden:renderKunden,anfragen:renderAnfragen,auftraege:renderAuftraege,material:renderMaterial,leistungen:renderLeistungen,plantafel:renderPlantafel,zeiterfassung:renderZeit,buchhaltung:renderBuchhaltung,steuer:renderSteuer,einstellungen:renderEinst,integrationen:renderIntegrationen,email:renderEmail};
   if(fns[n])fns[n]();
   else if(['angebote','ab','rechnungen','abschlag','lieferschein','mahnungen'].includes(n))renderDokList(n);
 }
@@ -1901,7 +1902,7 @@ function renderKunden(){
     <div class="card-hd">
       <input placeholder="🔍 Suchen..." oninput="filt('k_tb',this.value)" style="max-width:250px">
       <div style="display:flex;gap:8px">
-        <button class="btn bo bsm" onclick="exportKundenCsv()">⬇ Exportieren</button>
+        <button class="btn bo bsm" onclick="exportCSV('kunden')">⬇ Exportieren</button>
         <button class="btn bg2 bsm" onclick="openMod('kunde')">+ Neuer Kontakt</button>
       </div>
     </div>
@@ -1990,6 +1991,30 @@ function renderAuftraegeKanban(){
     </div>
   </div>`;
 }
+let objFilter='';
+function setObjFilter(v){objFilter=v;renderObjekte();}
+const OBJEKT_TYPEN=['Wohnhaus','Mehrfamilienhaus','Gewerbe','WEG','Baustelle','Sonstiges'];
+function renderObjekte(){
+  const gefiltert=objFilter?DB.objekte.filter(o=>o.typ===objFilter):DB.objekte;
+  const rows=gefiltert.map(o=>`<tr>
+    <td><b>${esc(o.name)}</b><div style="font-size:10px;color:var(--t3)">${esc(o.strasse||'')} ${o.strasse&&o.ort?'·':''} ${esc(o.ort||'')}</div></td>
+    <td><span class="bdg bg-b">${esc(o.typ||'Sonstiges')}</span></td>
+    <td>${esc(o.kunde||'–')}</td><td>${esc(o.baujahr||'–')}</td>
+    <td><div style="display:flex;gap:3px"><button class="bic" onclick="openMod('objekt','${o.id}')">✏️</button><button class="bic" onclick="delIt('objekte','${o.id}')">🗑️</button></div></td></tr>`).join('');
+  document.getElementById('content').innerHTML=`<div class="card">
+    <div class="card-hd">
+      <input placeholder="🔍 Objekte durchsuchen..." oninput="filt('o_tb',this.value)" style="max-width:250px">
+      <div style="display:flex;gap:8px">
+        <select onchange="setObjFilter(this.value)" style="max-width:180px">
+          <option value=""${objFilter===''?' selected':''}>Alle Objekte</option>
+          ${OBJEKT_TYPEN.map(t=>`<option${objFilter===t?' selected':''}>${t}</option>`).join('')}
+        </select>
+        <button class="btn bg2 bsm" onclick="openMod('objekt')">+ Objekt anlegen</button>
+      </div>
+    </div>
+    <table class="dt"><thead><tr><th>Objekt</th><th>Typ</th><th>Kunde</th><th>Baujahr</th><th></th></tr></thead>
+    <tbody id="o_tb">${rows||'<tr><td colspan="5" style="color:var(--t3);padding:16px">Keine Objekte vorhanden – lege ein Objekt direkt hier an oder verknüpfe es beim Projekt-Anlegen bzw. im Kunden-Tab.</td></tr>'}</tbody></table></div>`;
+}
 function renderMaterial(){
   const rows=DB.material.map(m=>`<tr>
     <td style="font-weight:700;color:var(--gold)">${esc(m.artnr)}</td><td><b>${esc(m.name)}</b></td><td>${esc(m.kat)}</td>
@@ -2010,6 +2035,12 @@ function renderLeistungen(){
   document.getElementById('content').innerHTML=`<div class="card"><table class="dt"><thead><tr><th>Nr.</th><th>Bezeichnung</th><th>Gewerk</th><th>Einheit</th><th>Std./Einh.</th><th>Preis/Einh.</th><th></th></tr></thead>
     <tbody>${rows||'<tr><td colspan="7" style="color:var(--t3);padding:16px">Keine Leistungen</td></tr>'}</tbody></table></div>`;
 }
+function dragQueueProjekt(e,name){e.dataTransfer.setData('queueProjekt',name);}
+function dropPlantafelCell(e,ma,datum){
+  e.preventDefault();e.currentTarget.classList.remove('drag-over');
+  const proj=e.dataTransfer.getData('queueProjekt');
+  if(proj){DB.plantafel.push({id:uid(),ma,datum,typ:'Auftrag',von:'07:00',bis:'16:00',projekt:proj});save();renderPlantafel();}
+}
 function renderPlantafel(){
   const MON=['Mo','Di','Mi','Do','Fr','Sa','So'];
   const base=new Date();base.setDate(base.getDate()-base.getDay()+1+ptOffset*7);
@@ -2017,6 +2048,8 @@ function renderPlantafel(){
   const kw=Math.ceil(((base-new Date(base.getFullYear(),0,1))/86400000+new Date(base.getFullYear(),0,1).getDay()+1)/7);
   const label=`KW ${kw} · ${days[0].toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})} – ${days[6].toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'})}`;
   const mas=DB.mitarbeiter.length?DB.mitarbeiter:['Danny Berger'];
+  const geplanteProjekte=new Set(DB.plantafel.filter(e=>e.projekt).map(e=>e.projekt));
+  const queueProjekte=DB.projekte.filter(p=>['Entwurf','Planung','In Bearbeitung'].includes(p.status)&&!geplanteProjekte.has(p.name));
   let grid=`<div class="ptf-grid" style="grid-template-columns:120px repeat(7,1fr)">`;
   grid+=`<div class="ptf-cell hd">Mitarbeiter</div>`;
   days.forEach((d,i)=>grid+=`<div class="ptf-cell hd">${MON[i]}<br><small style="font-weight:400;opacity:.7">${d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}</small></div>`);
@@ -2025,22 +2058,32 @@ function renderPlantafel(){
     days.forEach(d=>{
       const ds=d.toISOString().slice(0,10);
       const es=DB.plantafel.filter(e=>e.ma===ma&&e.datum===ds);
-      grid+=`<div class="ptf-cell" onclick="openMod('plantafel',null,'${esc(ma)}','${ds}')">`;
+      grid+=`<div class="ptf-cell" onclick="openMod('plantafel',null,'${esc(ma)}','${ds}')" ondragover="allowDrop(event)" ondrop="dropPlantafelCell(event,'${esc(ma)}','${ds}')">`;
       es.forEach(e=>{const cls=e.typ==='Urlaub'?'pe-u':e.typ==='Krank'?'pe-k':e.typ==='Frei'?'pe-f':'pe-a';
         grid+=`<span class="pe ${cls}" onclick="event.stopPropagation();openMod('plantafel','${e.id}')">${esc(e.typ==='Auftrag'?e.projekt||'Auftrag':e.typ)}</span>`;});
       grid+=`</div>`;
     });
   });
   grid+='</div>';
-  document.getElementById('content').innerHTML=`<div class="card">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-      <button class="btn bo bsm" onclick="ptOffset--;renderPlantafel()">◀</button>
-      <span style="font-size:13px;font-weight:800;color:var(--navy3)">${label}</span>
-      <button class="btn bo bsm" onclick="ptOffset++;renderPlantafel()">▶</button>
-      <button class="btn bg2 bsm" onclick="openMod('plantafel')">+ Eintrag</button>
-      ${window.FB_USER?'<span style="font-size:11px;color:var(--green);font-weight:600">🔄 Sync aktiv</span>':'<span style="font-size:11px;color:var(--t3)">⚠️ Nicht angemeldet</span>'}
+  document.getElementById('content').innerHTML=`<div style="display:grid;grid-template-columns:240px 1fr;gap:14px;align-items:start">
+    <div class="card">
+      <div class="card-hd"><span class="ct">Projekt-Queue</span></div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:10px">Projekte ohne Einsatz-Termin. Per Drag auf einen Tag ziehen.</div>
+      ${queueProjekte.length?queueProjekte.map(p=>`<div class="kb-card" draggable="true" ondragstart="dragQueueProjekt(event,'${esc(p.name).replace(/'/g,"\\'")}')" style="margin-bottom:8px;cursor:grab">
+        <div class="kb-card-title">${esc(p.name)}</div>
+        <div class="kb-card-sub">${esc(p.kunde||'')}</div>
+      </div>`).join(''):`<div style="color:var(--t3);font-size:12px;text-align:center;padding:16px 0">Keine ungeplanten Projekte</div>`}
     </div>
-    <div class="ptf">${grid}</div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <button class="btn bo bsm" onclick="ptOffset--;renderPlantafel()">◀</button>
+        <span style="font-size:13px;font-weight:800;color:var(--navy3)">${label}</span>
+        <button class="btn bo bsm" onclick="ptOffset++;renderPlantafel()">▶</button>
+        <button class="btn bg2 bsm" onclick="openMod('plantafel')">+ Eintrag</button>
+        ${window.FB_USER?'<span style="font-size:11px;color:var(--green);font-weight:600">🔄 Sync aktiv</span>':'<span style="font-size:11px;color:var(--t3)">⚠️ Nicht angemeldet</span>'}
+      </div>
+      <div class="ptf">${grid}</div>
+    </div>
   </div>`;
 }
 function renderZeit(){
@@ -2126,7 +2169,7 @@ function loadLogo(inp){const f=inp.files[0];if(!f)return;const r=new FileReader(
 // ════════════════════════════════════════════════════
 // MODAL STAMMDATEN
 // ════════════════════════════════════════════════════
-const T2A={kunde:'kunden',anfrage:'anfragen',projekt:'projekte',auftrag:'auftraege',material:'material',leistung:'leistungen',plantafel:'plantafel',buchung:'buchhaltung',termin:'termine'};
+const T2A={kunde:'kunden',anfrage:'anfragen',projekt:'projekte',auftrag:'auftraege',objekt:'objekte',material:'material',leistung:'leistungen',plantafel:'plantafel',buchung:'buchhaltung',termin:'termine'};
 const ANFRAGE_STATI=['Neu','Geprüft','Termin geplant','Angebot in Arbeit','Angebot gesendet','Nachfassen','Gewonnen','Verloren'];
 const ANFRAGE_STATI_AKTIV=ANFRAGE_STATI.filter(s=>s!=='Gewonnen'&&s!=='Verloren');
 const ANFRAGE_FARBEN={'Neu':'var(--navy)','Geprüft':'var(--purple)','Termin geplant':'var(--orange)','Angebot in Arbeit':'var(--gold)','Angebot gesendet':'var(--gold)','Nachfassen':'var(--red)','Gewonnen':'var(--green)','Verloren':'var(--t3)'};
@@ -2136,7 +2179,7 @@ function openMod(type,id=null,...ex){
   curMT=type;curMId=id;
   const item=id?DB[T2A[type]]?.find(x=>x.id===id):{};
   document.getElementById('modal_ov').classList.add('open');
-  document.getElementById('modal_ttl').textContent=(id?'Bearbeiten: ':'Neu: ')+{kunde:'Kunde',anfrage:'Kundenanfrage',projekt:'Projekt',auftrag:'Auftrag',material:'Material',leistung:'Leistung',plantafel:'Plantafel-Eintrag',buchung:'Buchung',termin:'Termin'}[type];
+  document.getElementById('modal_ttl').textContent=(id?'Bearbeiten: ':'Neu: ')+{kunde:'Kunde',anfrage:'Kundenanfrage',projekt:'Projekt',auftrag:'Auftrag',objekt:'Objekt',material:'Material',leistung:'Leistung',plantafel:'Plantafel-Eintrag',buchung:'Buchung',termin:'Termin'}[type];
   document.getElementById('modal_body').innerHTML=modBody(type,item||{},ex);
 }
 function closeModal(){document.getElementById('modal_ov').classList.remove('open');}
@@ -2180,6 +2223,14 @@ function modBody(type,d,ex){
     <div class="f"><label>Mitarbeiter</label><select id="m_ma">${maOpts(d.ma)}</select></div>
     <div class="f"><label>Status</label><select id="m_stat">${stat(PROJEKT_STATI,d.status||'Entwurf')}</select></div>
   </div><div class="f" style="margin-top:10px"><label>Notizen</label><textarea id="m_notiz" rows="2">${esc(d.notiz||'')}</textarea></div>`;
+  if(type==='objekt')return`${kl}<div class="g2">
+    <div class="f"><label>Objektname *</label><input id="m_name" value="${esc(d.name||'')}"></div>
+    <div class="f"><label>Typ</label><select id="m_typ">${stat(['Wohnhaus','Mehrfamilienhaus','Gewerbe','WEG','Baustelle','Sonstiges'],d.typ||'Wohnhaus')}</select></div>
+    <div class="f"><label>Kunde</label><input id="m_kunde" list="kl_m" value="${esc(d.kunde||'')}"></div>
+    <div class="f"><label>Straße & Hausnr.</label><input id="m_str" value="${esc(d.strasse||'')}"></div>
+    <div class="f"><label>PLZ & Ort</label><input id="m_ort" value="${esc(d.ort||'')}"></div>
+    <div class="f"><label>Baujahr</label><input id="m_baujahr" value="${esc(d.baujahr||'')}"></div>
+  </div><div class="f" style="margin-top:10px"><label>Notiz</label><textarea id="m_notiz" rows="2">${esc(d.notiz||'')}</textarea></div>`;
   if(type==='material')return`<div class="g2">
     <div class="f"><label>Art.-Nr.</label><input id="m_artnr" value="${esc(d.artnr||'')}"></div>
     <div class="f"><label>Bezeichnung *</label><input id="m_name" value="${esc(d.name||'')}"></div>
@@ -2234,6 +2285,7 @@ function modalOK(){
   else if(t==='anfrage')Object.assign(item,{datum:gv('m_dat'),kunde:gv('m_kunde'),betreff:gv('m_betr'),gewerk:gv('m_gew'),weg:gv('m_weg'),status:gv('m_stat'),notiz:gv('m_notiz')});
   else if(t==='projekt')Object.assign(item,{name:gv('m_name'),kunde:gv('m_kunde'),beginn:gv('m_beg'),ende:gv('m_ende'),status:gv('m_stat'),budget:parseFloat(gv('m_bud'))||0,beschr:gv('m_beschr'),nr:item.nr||'P-'+(100+DB.projekte.length+1)});
   else if(t==='auftrag')Object.assign(item,{titel:gv('m_titel'),kunde:gv('m_kunde'),gewerk:gv('m_gew'),termin:gv('m_term'),ma:gv('m_ma'),status:gv('m_stat'),notiz:gv('m_notiz'),nr:item.nr||'A-'+(1000+DB.auftraege.length+1)});
+  else if(t==='objekt')Object.assign(item,{name:gv('m_name'),typ:gv('m_typ'),kunde:gv('m_kunde'),strasse:gv('m_str'),ort:gv('m_ort'),baujahr:gv('m_baujahr'),notiz:gv('m_notiz')});
   else if(t==='material')Object.assign(item,{artnr:gv('m_artnr'),name:gv('m_name'),kat:gv('m_kat'),einheit:gv('m_ein'),ek:parseFloat(gv('m_ek'))||0,vk:parseFloat(gv('m_vk'))||0,lief:gv('m_lief'),mind:parseFloat(gv('m_mind'))||0});
   else if(t==='leistung')Object.assign(item,{nr:gv('m_nr'),name:gv('m_name'),gewerk:gv('m_gew'),einheit:gv('m_ein'),std:parseFloat(gv('m_std'))||1,preis:parseFloat(gv('m_preis'))||0});
   else if(t==='plantafel')Object.assign(item,{ma:gv('m_ma'),datum:gv('m_dat'),typ:gv('m_typ'),von:gv('m_von'),bis:gv('m_bis'),projekt:gv('m_proj')});
@@ -2245,13 +2297,6 @@ function modalOK(){
 
 function delIt(arr,id){if(!confirm('Löschen?'))return;DB[arr]=DB[arr].filter(x=>x.id!==id);save();renderPage(curPage);}
 function filt(tbId,q){document.querySelectorAll(`#${tbId} tr`).forEach(tr=>{tr.style.display=tr.textContent.toLowerCase().includes(q.toLowerCase())?'':'none';});}
-function csvEsc(v){const s=String(v??'');return/[;"\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;}
-function exportKundenCsv(){
-  const head=['Nr.','Name/Firma','Typ','Ansprechpartner','Straße','Ort','Telefon','E-Mail','Bemerkung'];
-  const lines=[head.join(';')].concat(DB.kunden.map(k=>[k.nr,k.name,k.typ||'Privat',k.ap||'',k.strasse||'',k.ort||'',k.tel||'',k.email||'',k.bem||''].map(csvEsc).join(';')));
-  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Kunden_${today()}.csv`;a.click();URL.revokeObjectURL(a.href);
-}
 
 // ════════════════════════════════════════════════════
 // DOKUMENTE

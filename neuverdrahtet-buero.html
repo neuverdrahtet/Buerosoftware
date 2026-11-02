@@ -241,6 +241,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);background:#fff
   <div class="ni" onclick="pg('leistungen')"><span class="ic">⚙️</span>Leistungen</div>
   <div class="ni" onclick="pg('plantafel')"><span class="ic">🗓️</span>Plantafel</div>
   <div class="ni" onclick="pg('zeiterfassung')"><span class="ic">⏱️</span>Zeiterfassung</div>
+  <div class="ni" onclick="pg('zeitadmin')"><span class="ic">🗂️</span>Zeit-Admin</div>
   <div class="sb-sec">System</div>
   <div class="ni" onclick="pg('einstellungen')"><span class="ic">🏢</span>Firmendaten</div>
   <div class="ni" onclick="pg('email')"><span class="ic">📧</span>E-Mail (Gmail)</div>
@@ -531,7 +532,7 @@ const stat=(arr,cur)=>arr.map(s=>`<option${cur===s?' selected':''}>${s}</option>
 // ════════════════════════════════════════════════════
 // NAVIGATION
 // ════════════════════════════════════════════════════
-const TITLES={dashboard:'Dashboard',kalender:'Kalender',projekte_kanban:'Projekte',objekte:'Objekte',wartung:'Wartung',angebote:'Angebote',ab:'Auftragsbestätigungen',rechnungen:'Rechnungen',abschlag:'Abschlagsrechnungen',lieferschein:'Lieferscheine',mahnungen:'Mahnungen',buchhaltung:'Buchhaltung',steuer:'Steuerberater-Export',kunden:'Kunden',anfragen:'Kundenanfragen',auftraege:'Aufträge',material:'Materialstamm',leistungen:'Leistungskatalog',plantafel:'Plantafel',zeiterfassung:'Zeiterfassung',einstellungen:'Firmendaten',integrationen:'Integrationen',email:'E-Mail (Gmail)'};
+const TITLES={dashboard:'Dashboard',kalender:'Kalender',projekte_kanban:'Projekte',objekte:'Objekte',wartung:'Wartung',zeitadmin:'Zeit-Admin',angebote:'Angebote',ab:'Auftragsbestätigungen',rechnungen:'Rechnungen',abschlag:'Abschlagsrechnungen',lieferschein:'Lieferscheine',mahnungen:'Mahnungen',buchhaltung:'Buchhaltung',steuer:'Steuerberater-Export',kunden:'Kunden',anfragen:'Kundenanfragen',auftraege:'Aufträge',material:'Materialstamm',leistungen:'Leistungskatalog',plantafel:'Plantafel',zeiterfassung:'Zeiterfassung',einstellungen:'Firmendaten',integrationen:'Integrationen',email:'E-Mail (Gmail)'};
 let curPage='dashboard';
 
 function pg(name){
@@ -549,7 +550,7 @@ function pg(name){
 }
 
 function renderPage(n){
-  const fns={dashboard:renderDash,kalender:renderKalender,projekte_kanban:renderKanban,objekte:renderObjekte,wartung:renderWartung,kunden:renderKunden,anfragen:renderAnfragen,auftraege:renderAuftraege,material:renderMaterial,leistungen:renderLeistungen,plantafel:renderPlantafel,zeiterfassung:renderZeit,buchhaltung:renderBuchhaltung,steuer:renderSteuer,einstellungen:renderEinst,integrationen:renderIntegrationen,email:renderEmail};
+  const fns={dashboard:renderDash,kalender:renderKalender,projekte_kanban:renderKanban,objekte:renderObjekte,wartung:renderWartung,zeitadmin:renderZeitAdmin,kunden:renderKunden,anfragen:renderAnfragen,auftraege:renderAuftraege,material:renderMaterial,leistungen:renderLeistungen,plantafel:renderPlantafel,zeiterfassung:renderZeit,buchhaltung:renderBuchhaltung,steuer:renderSteuer,einstellungen:renderEinst,integrationen:renderIntegrationen,email:renderEmail};
   if(fns[n])fns[n]();
   else if(['angebote','ab','rechnungen','abschlag','lieferschein','mahnungen'].includes(n))renderDokList(n);
 }
@@ -2118,13 +2119,14 @@ function renderPlantafel(){
 }
 let zeitTimer=null,zeitTimerInterval=null,zeitFilter='diesesMonat';
 function zeitDate(s){return s?new Date(s.split('.').reverse().join('-')):null;}
-function zeitFilterPredicate(){
+function zeitFilterPredicate(f){
+  f=f||zeitFilter;
   const now=new Date(),heute=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  if(zeitFilter==='alle')return()=>true;
-  if(zeitFilter==='heute')return z=>{const d=zeitDate(z.datum);return d&&d.getTime()===heute.getTime();};
-  if(zeitFilter==='7tage'){const ab=new Date(heute);ab.setDate(ab.getDate()-7);return z=>{const d=zeitDate(z.datum);return d&&d>=ab;};}
-  if(zeitFilter==='30tage'){const ab=new Date(heute);ab.setDate(ab.getDate()-30);return z=>{const d=zeitDate(z.datum);return d&&d>=ab;};}
-  if(zeitFilter==='letzterMonat'){const m=now.getMonth()-1,j=m<0?now.getFullYear()-1:now.getFullYear(),mm=(m+12)%12;return z=>{const d=zeitDate(z.datum);return d&&d.getMonth()===mm&&d.getFullYear()===j;};}
+  if(f==='alle')return()=>true;
+  if(f==='heute')return z=>{const d=zeitDate(z.datum);return d&&d.getTime()===heute.getTime();};
+  if(f==='7tage'){const ab=new Date(heute);ab.setDate(ab.getDate()-7);return z=>{const d=zeitDate(z.datum);return d&&d>=ab;};}
+  if(f==='30tage'){const ab=new Date(heute);ab.setDate(ab.getDate()-30);return z=>{const d=zeitDate(z.datum);return d&&d>=ab;};}
+  if(f==='letzterMonat'){const m=now.getMonth()-1,j=m<0?now.getFullYear()-1:now.getFullYear(),mm=(m+12)%12;return z=>{const d=zeitDate(z.datum);return d&&d.getMonth()===mm&&d.getFullYear()===j;};}
   return z=>{const d=zeitDate(z.datum);return d&&d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();};
 }
 function setZeitFilter(f){zeitFilter=f;renderZeit();}
@@ -2206,6 +2208,65 @@ function addZeit(){
   let std=0;if(von&&bis){const[vh,vm]=von.split(':').map(Number);const[bh,bm]=bis.split(':').map(Number);std=Math.max(0,(bh*60+bm-vh*60-vm-pau)/60);}
   DB.zeitbuchungen.push({id:uid(),ma:gv('ze_ma'),datum:gv('ze_dat'),projekt:gv('ze_proj'),taetigkeit:gv('ze_tat'),von,bis,stunden:std.toFixed(2),bemerkung:gv('ze_bem'),status:'Eingereicht'});
   save();renderZeit();
+}
+
+let zeitAdminTab='mitarbeiter',zeitAdminFilter='diesesMonat';
+function setZeitAdminTab(t){zeitAdminTab=t;renderZeitAdmin();}
+function setZeitAdminFilter(f){zeitAdminFilter=f;renderZeitAdmin();}
+function zeitAdminTabBtns(){
+  const tabs=[['mitarbeiter','Mitarbeiterübersicht'],['genehmigungen','Genehmigungen'],['abwesenheiten','Team-Abwesenheiten'],['feiertage','Feiertage']];
+  return`<div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px;padding-bottom:10px;flex-wrap:wrap">
+    ${tabs.map(([v,l])=>v==='mitarbeiter'||v==='genehmigungen'
+      ?`<button class="btn ${zeitAdminTab===v?'bg2':'bo'} bsm" onclick="setZeitAdminTab('${v}')">${l}</button>`
+      :`<span class="btn bo bsm" style="opacity:.5;cursor:default" title="Noch nicht verfügbar">${l}</span>`).join('')}
+  </div>`;
+}
+function renderZeitAdmin(){
+  if(zeitAdminTab==='genehmigungen')return renderZeitAdminGenehmigungen();
+  const gefiltert=DB.zeitbuchungen.filter(zeitFilterPredicate(zeitAdminFilter));
+  const total=gefiltert.reduce((s,z)=>s+(+z.stunden||0),0);
+  const filterChips=[['heute','Heute'],['7tage','Letzte 7 Tage'],['30tage','Letzte 30 Tage'],['letzterMonat','Letzter Monat'],['diesesMonat','Dieser Monat'],['alle','Alle']];
+  const perMa=DB.mitarbeiter.map(ma=>{
+    const eintraege=gefiltert.filter(z=>z.ma===ma);
+    const std=eintraege.reduce((s,z)=>s+(+z.stunden||0),0);
+    const genehmigt=eintraege.filter(z=>(z.status||'Eingereicht')==='Genehmigt').length;
+    return{ma,anzahl:eintraege.length,std,genehmigt};
+  });
+  document.getElementById('content').innerHTML=`<div class="card">
+    <div class="card-hd"><span class="ct">🗂️ Zeit-Admin</span></div>
+    ${zeitAdminTabBtns()}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      ${filterChips.map(([v,l])=>`<button class="btn ${zeitAdminFilter===v?'bg2':'bo'} bsm" onclick="setZeitAdminFilter('${v}')">${l}</button>`).join('')}
+    </div>
+    <div style="text-align:center;margin-bottom:18px">
+      <div style="font-size:42px;font-weight:900;color:var(--navy3)">${total.toFixed(1)} h</div>
+      <div style="font-size:12px;color:var(--t3)">Gesamte Arbeitszeit · ${gefiltert.length} Einträge · ${DB.mitarbeiter.length} aktive Mitarbeiter</div>
+    </div>
+    <table class="dt"><thead><tr><th>Mitarbeiter</th><th>Einträge</th><th>Stunden</th><th>Genehmigt</th></tr></thead>
+    <tbody>${perMa.map(p=>`<tr><td style="font-weight:600">${esc(p.ma)}</td><td>${p.anzahl}</td><td style="font-weight:700;color:var(--navy)">${p.std.toFixed(1)} h</td><td>${p.genehmigt}/${p.anzahl}</td></tr>`).join('')||'<tr><td colspan="4" style="color:var(--t3);padding:16px">Keine Mitarbeiter</td></tr>'}</tbody></table>
+  </div>`;
+}
+function zeitAdminSetStatus(id,status){const z=DB.zeitbuchungen.find(x=>x.id===id);if(z){z.status=status;save();}}
+function zeitAdminGenehmigeAlle(){DB.zeitbuchungen.filter(z=>(z.status||'Eingereicht')==='Eingereicht').forEach(z=>z.status='Genehmigt');save();renderZeitAdmin();}
+function renderZeitAdminGenehmigungen(){
+  const offen=DB.zeitbuchungen.filter(z=>(z.status||'Eingereicht')==='Eingereicht');
+  const rows=offen.map(z=>`<tr>
+    <td>${esc(z.datum)}</td><td style="font-weight:600">${esc(z.ma)}</td><td>${esc(z.projekt||'–')}</td>
+    <td style="font-weight:700;color:var(--navy)">${esc(z.stunden)} h</td>
+    <td><div style="display:flex;gap:3px">
+      <button class="bic" onclick="zeitAdminSetStatus('${z.id}','Genehmigt');renderZeitAdmin()" title="Genehmigen">✓</button>
+      <button class="bic" onclick="zeitAdminSetStatus('${z.id}','Entwurf');renderZeitAdmin()" title="Zurück an Entwurf">↩</button>
+    </div></td></tr>`).join('');
+  document.getElementById('content').innerHTML=`<div class="card">
+    <div class="card-hd"><span class="ct">🗂️ Zeit-Admin</span></div>
+    ${zeitAdminTabBtns()}
+    <div class="card-hd">
+      <span style="font-size:13px;color:var(--t3)">${offen.length} Einträge warten auf Genehmigung</span>
+      ${offen.length?`<button class="btn bg2 bsm" onclick="zeitAdminGenehmigeAlle()">✓ Alle genehmigen</button>`:''}
+    </div>
+    <table class="dt"><thead><tr><th>Datum</th><th>Mitarbeiter</th><th>Projekt</th><th>Stunden</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="5" style="color:var(--t3);padding:16px">Keine offenen Genehmigungen</td></tr>'}</tbody></table>
+  </div>`;
 }
 
 function renderEinst(){

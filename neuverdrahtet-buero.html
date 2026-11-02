@@ -564,7 +564,7 @@ function renderDash(){
   const gewinn=einnahmen-ausgaben;
   const laufendeProjekte=DB.projekte.filter(p=>p.status==='In Bearbeitung').length;
   const offeneAngebote=DB.angebote.filter(a=>(a.status||'offen')==='offen').length;
-  const gesicherteAuftraege=DB.auftraege.filter(a=>['Auftrag','In Arbeit','Abgeschlossen'].includes(a.status)).length;
+  const gesicherteAuftraege=DB.auftraege.filter(a=>['In Bearbeitung','Pausiert','Abgeschlossen'].includes(a.status)).length;
   const siebenTageAgo=new Date();siebenTageAgo.setDate(siebenTageAgo.getDate()-7);
   const erfassteZeitKW=DB.zeitbuchungen.filter(z=>z.datum&&new Date(z.datum.split('.').reverse().join('-'))>=siebenTageAgo).reduce((s,z)=>s+(+z.stunden||0),0);
   const naechsteTermine=DB.termine.filter(t=>t.datum).sort((a,b)=>a.datum>b.datum?1:-1).slice(0,4);
@@ -1898,7 +1898,13 @@ function renderKunden(){
     <td><span class="bdg ${k.typ==='Firma'?'bg-b':'bg-gr'}">${esc(k.typ||'Privat')}</span></td>
     <td><div style="display:flex;gap:3px"><button class="bic" onclick="openMod('kunde','${k.id}')">✏️</button><button class="bic" onclick="delIt('kunden','${k.id}')">🗑️</button></div></td></tr>`).join('');
   document.getElementById('content').innerHTML=`<div class="card">
-    <div class="card-hd"><input placeholder="🔍 Suchen..." oninput="filt('k_tb',this.value)" style="max-width:250px"></div>
+    <div class="card-hd">
+      <input placeholder="🔍 Suchen..." oninput="filt('k_tb',this.value)" style="max-width:250px">
+      <div style="display:flex;gap:8px">
+        <button class="btn bo bsm" onclick="exportKundenCsv()">⬇ Exportieren</button>
+        <button class="btn bg2 bsm" onclick="openMod('kunde')">+ Neuer Kontakt</button>
+      </div>
+    </div>
     <table class="dt"><thead><tr><th>Nr.</th><th>Name/Firma</th><th>Ort</th><th>Tel.</th><th>E-Mail</th><th>Typ</th><th></th></tr></thead>
     <tbody id="k_tb">${rows||'<tr><td colspan="7" style="color:var(--t3);padding:16px">Noch keine Kunden</td></tr>'}</tbody></table></div>`;
 }
@@ -1940,14 +1946,49 @@ function renderAnfragen(){
     </tr>`).join('')||'<tr><td colspan="5" style="color:var(--t3);padding:16px">Noch keine gewonnenen/verlorenen Anfragen</td></tr>'}</tbody></table>
   </div>`;
 }
+let auftragView='liste';
+function setAuftragView(v){auftragView=v;renderAuftraege();}
+function auftragToggleBtns(){return`<div style="display:flex;gap:8px;align-items:center">
+  <button class="btn ${auftragView==='liste'?'bg2':'bo'} bsm" onclick="setAuftragView('liste')">☰ Liste</button>
+  <button class="btn ${auftragView==='kanban'?'bg2':'bo'} bsm" onclick="setAuftragView('kanban')">▦ Kanban</button>
+  <button class="btn bg2 bsm" onclick="openMod('auftrag')">+ Auftrag</button>
+</div>`;}
 function renderAuftraege(){
+  if(auftragView==='kanban'){renderAuftraegeKanban();return;}
   const rows=DB.auftraege.map(a=>`<tr>
     <td style="font-weight:700;color:var(--gold)">${esc(a.nr)}</td><td><b>${esc(a.titel)}</b></td><td>${esc(a.kunde)}</td>
     <td>${esc(a.termin)}</td><td>${esc(a.ma||'–')}</td>
-    <td><span class="bdg ${a.status==='In Arbeit'?'bg-o':a.status==='Abgeschlossen'?'bg-g':a.status==='Auftrag'?'bg-gold':'bg-b'}">${esc(a.status)}</span></td>
+    <td><span class="bdg" style="background:${PROJEKT_FARBEN[a.status]||'var(--t3)'};color:#fff">${esc(a.status||'Entwurf')}</span></td>
     <td><div style="display:flex;gap:3px"><button class="bic" onclick="openMod('auftrag','${a.id}')">✏️</button><button class="bic" onclick="delIt('auftraege','${a.id}')">🗑️</button></div></td></tr>`).join('');
-  document.getElementById('content').innerHTML=`<div class="card"><table class="dt"><thead><tr><th>Nr.</th><th>Titel</th><th>Kunde</th><th>Termin</th><th>MA</th><th>Status</th><th></th></tr></thead>
+  document.getElementById('content').innerHTML=`<div class="card">
+    <div class="card-hd"><span class="ct">Aufträge</span>${auftragToggleBtns()}</div>
+    <table class="dt"><thead><tr><th>Nr.</th><th>Titel</th><th>Kunde</th><th>Termin</th><th>MA</th><th>Status</th><th></th></tr></thead>
     <tbody>${rows||'<tr><td colspan="7" style="color:var(--t3);padding:16px">Keine Aufträge</td></tr>'}</tbody></table></div>`;
+}
+function renderAuftraegeKanban(){
+  document.getElementById('content').innerHTML=`
+  <div class="card" style="overflow:visible">
+    <div class="card-hd"><span class="ct">Aufträge</span>${auftragToggleBtns()}</div>
+    <div class="kanban" id="auftraege_board" style="grid-template-columns:repeat(${PROJEKT_STATI.length},1fr)">
+      ${PROJEKT_STATI.map(col=>`
+      <div class="kb-col" data-col="${col}" ondrop="dropK(event,'${col}','auftraege',renderAuftraege)" ondragover="allowDrop(event)">
+        <div class="kb-col-hd">
+          <span style="width:8px;height:8px;border-radius:50%;background:${PROJEKT_FARBEN[col]};display:inline-block"></span>
+          ${col} <span class="kb-cnt">${DB.auftraege.filter(a=>a.status===col).length}</span>
+        </div>
+        ${DB.auftraege.filter(a=>a.status===col).map(a=>`
+        <div class="kb-card" draggable="true" ondragstart="dragK(event,'${a.id}')" id="kb_${a.id}" onclick="openMod('auftrag','${a.id}')">
+          <div class="kb-card-title">${esc(a.titel||'–')}</div>
+          <div class="kb-card-sub">${esc(a.kunde||'–')}</div>
+          <div class="kb-card-foot">
+            <span class="bdg bg-gr" style="font-size:9px">${esc(a.nr||'')}</span>
+            <span style="font-size:10px;color:var(--t3)">${esc(a.termin||'')}</span>
+          </div>
+        </div>`).join('')}
+        <button class="badd" style="font-size:11px;padding:6px" onclick="openMod('auftrag')">+</button>
+      </div>`).join('')}
+    </div>
+  </div>`;
 }
 function renderMaterial(){
   const rows=DB.material.map(m=>`<tr>
@@ -2137,7 +2178,7 @@ function modBody(type,d,ex){
     <div class="f"><label>Gewerk</label><select id="m_gew">${stat(['Elektriker','DGUV','Badsanierung','Maler','Trockenbau','Fliesenleger','Bodenleger','Elektrosanierung','Wohnungsrenovierung','Sonstiges'],d.gewerk||'Elektriker')}</select></div>
     <div class="f"><label>Termin</label><input id="m_term" value="${esc(d.termin||today())}"></div>
     <div class="f"><label>Mitarbeiter</label><select id="m_ma">${maOpts(d.ma)}</select></div>
-    <div class="f"><label>Status</label><select id="m_stat">${stat(['Anfrage','Angebot','Auftrag','In Arbeit','Abgeschlossen','Storniert'],d.status||'Anfrage')}</select></div>
+    <div class="f"><label>Status</label><select id="m_stat">${stat(PROJEKT_STATI,d.status||'Entwurf')}</select></div>
   </div><div class="f" style="margin-top:10px"><label>Notizen</label><textarea id="m_notiz" rows="2">${esc(d.notiz||'')}</textarea></div>`;
   if(type==='material')return`<div class="g2">
     <div class="f"><label>Art.-Nr.</label><input id="m_artnr" value="${esc(d.artnr||'')}"></div>
@@ -2204,6 +2245,13 @@ function modalOK(){
 
 function delIt(arr,id){if(!confirm('Löschen?'))return;DB[arr]=DB[arr].filter(x=>x.id!==id);save();renderPage(curPage);}
 function filt(tbId,q){document.querySelectorAll(`#${tbId} tr`).forEach(tr=>{tr.style.display=tr.textContent.toLowerCase().includes(q.toLowerCase())?'':'none';});}
+function csvEsc(v){const s=String(v??'');return/[;"\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;}
+function exportKundenCsv(){
+  const head=['Nr.','Name/Firma','Typ','Ansprechpartner','Straße','Ort','Telefon','E-Mail','Bemerkung'];
+  const lines=[head.join(';')].concat(DB.kunden.map(k=>[k.nr,k.name,k.typ||'Privat',k.ap||'',k.strasse||'',k.ort||'',k.tel||'',k.email||'',k.bem||''].map(csvEsc).join(';')));
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Kunden_${today()}.csv`;a.click();URL.revokeObjectURL(a.href);
+}
 
 // ════════════════════════════════════════════════════
 // DOKUMENTE

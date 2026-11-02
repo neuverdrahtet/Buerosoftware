@@ -252,6 +252,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);background:#fff
   <div class="sb-sec">System</div>
   <div class="ni" onclick="pg('einstellungen')"><span class="ic">🏢</span>Firmendaten</div>
   <div class="ni" onclick="pg('email')"><span class="ic">📧</span>E-Mail (Gmail)</div>
+  <div class="ni" onclick="pg('chats')"><span class="ic">💬</span>Chats</div>
   <div class="ni" onclick="pg('integrationen')"><span class="ic">🔗</span>Integrationen</div>
 </div>
 
@@ -298,7 +299,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);background:#fff
 // DATABASE
 // ════════════════════════════════════════════════════
 const DB={
-  kunden:[],anfragen:[],projekte:[],auftraege:[],objekte:[],wartungsvertraege:[],aufgaben:[],notizen:[],rubriken:[],dokumente:[],
+  kunden:[],anfragen:[],projekte:[],auftraege:[],objekte:[],wartungsvertraege:[],aufgaben:[],notizen:[],rubriken:[],dokumente:[],chatnachrichten:[],
   material:[],leistungen:[],angebote:[],ab:[],rechnungen:[],
   abschlag:[],lieferschein:[],mahnungen:[],zeitbuchungen:[],plantafel:[],
   buchhaltung:[],termine:[],mitarbeiter:['Danny Berger'],
@@ -539,7 +540,7 @@ const stat=(arr,cur)=>arr.map(s=>`<option${cur===s?' selected':''}>${s}</option>
 // ════════════════════════════════════════════════════
 // NAVIGATION
 // ════════════════════════════════════════════════════
-const TITLES={dashboard:'Dashboard',kalender:'Kalender',projekte_kanban:'Projekte',objekte:'Objekte',wartung:'Wartung',zeitadmin:'Zeit-Admin',aufgaben:'Termine & Aufgaben',datenablage:'Datenablage',notizbuch:'Notizbuch',angebote:'Angebote',ab:'Auftragsbestätigungen',rechnungen:'Rechnungen',abschlag:'Abschlagsrechnungen',lieferschein:'Lieferscheine',mahnungen:'Mahnungen',buchhaltung:'Buchhaltung',steuer:'Steuerberater-Export',kunden:'Kunden',anfragen:'Kundenanfragen',auftraege:'Aufträge',material:'Materialstamm',leistungen:'Leistungskatalog',plantafel:'Plantafel',zeiterfassung:'Zeiterfassung',einstellungen:'Firmendaten',integrationen:'Integrationen',email:'E-Mail (Gmail)'};
+const TITLES={dashboard:'Dashboard',kalender:'Kalender',projekte_kanban:'Projekte',objekte:'Objekte',wartung:'Wartung',zeitadmin:'Zeit-Admin',aufgaben:'Termine & Aufgaben',datenablage:'Datenablage',notizbuch:'Notizbuch',chats:'Chats',angebote:'Angebote',ab:'Auftragsbestätigungen',rechnungen:'Rechnungen',abschlag:'Abschlagsrechnungen',lieferschein:'Lieferscheine',mahnungen:'Mahnungen',buchhaltung:'Buchhaltung',steuer:'Steuerberater-Export',kunden:'Kunden',anfragen:'Kundenanfragen',auftraege:'Aufträge',material:'Materialstamm',leistungen:'Leistungskatalog',plantafel:'Plantafel',zeiterfassung:'Zeiterfassung',einstellungen:'Firmendaten',integrationen:'Integrationen',email:'E-Mail (Gmail)'};
 let curPage='dashboard';
 
 function pg(name){
@@ -557,7 +558,7 @@ function pg(name){
 }
 
 function renderPage(n){
-  const fns={dashboard:renderDash,kalender:renderKalender,projekte_kanban:renderKanban,objekte:renderObjekte,wartung:renderWartung,zeitadmin:renderZeitAdmin,aufgaben:renderAufgaben,datenablage:renderDatenablage,notizbuch:renderNotizbuch,kunden:renderKunden,anfragen:renderAnfragen,auftraege:renderAuftraege,material:renderMaterial,leistungen:renderLeistungen,plantafel:renderPlantafel,zeiterfassung:renderZeit,buchhaltung:renderBuchhaltung,steuer:renderSteuer,einstellungen:renderEinst,integrationen:renderIntegrationen,email:renderEmail};
+  const fns={dashboard:renderDash,kalender:renderKalender,projekte_kanban:renderKanban,objekte:renderObjekte,wartung:renderWartung,zeitadmin:renderZeitAdmin,aufgaben:renderAufgaben,datenablage:renderDatenablage,notizbuch:renderNotizbuch,chats:renderChats,kunden:renderKunden,anfragen:renderAnfragen,auftraege:renderAuftraege,material:renderMaterial,leistungen:renderLeistungen,plantafel:renderPlantafel,zeiterfassung:renderZeit,buchhaltung:renderBuchhaltung,steuer:renderSteuer,einstellungen:renderEinst,integrationen:renderIntegrationen,email:renderEmail};
   if(fns[n])fns[n]();
   else if(['angebote','ab','rechnungen','abschlag','lieferschein','mahnungen'].includes(n))renderDokList(n);
 }
@@ -2194,6 +2195,53 @@ function renderNotizbuch(){
           <button class="btn bo" onclick="delNotiz('${sel.id}')">🗑️ Löschen</button>
         </div>`
       :`<div style="color:var(--t3);text-align:center;padding:60px 0">Wähle links einen Eintrag — oder klicke auf "+ Neu".</div>`}
+    </div>
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════
+// CHATS (projektbezogen)
+// ════════════════════════════════════════════════════
+let chatSelectedProjekt=null,chatSuche='';
+function selectChatProjekt(name){chatSelectedProjekt=name;renderChats();}
+function sendChatMsg(){
+  if(!chatSelectedProjekt)return;
+  const text=gv('chat_input');if(!text)return;
+  const von=gv('chat_von');
+  DB.chatnachrichten.push({id:uid(),projekt:chatSelectedProjekt,text,von,zeit:new Date().toISOString()});
+  save();renderChats();
+}
+function renderChats(){
+  const projekteGefiltert=DB.projekte.filter(p=>chatSuche?p.name.toLowerCase().includes(chatSuche.toLowerCase()):true);
+  const nachrichtenFuer=name=>DB.chatnachrichten.filter(m=>m.projekt===name);
+  document.getElementById('content').innerHTML=`<div style="display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:start">
+    <div class="card">
+      <div class="card-hd"><span class="ct">Chats</span></div>
+      <input placeholder="🔍 Projekt suchen..." oninput="chatSuche=this.value;renderChats()" value="${esc(chatSuche)}" style="margin-bottom:10px">
+      ${projekteGefiltert.map(p=>{
+        const msgs=nachrichtenFuer(p.name);
+        const letzte=msgs[msgs.length-1];
+        return`<div class="lrow${chatSelectedProjekt===p.name?' active':''}" style="display:block" onclick="selectChatProjekt('${p.name.replace(/'/g,"\\'")}')">
+          <div style="font-weight:700">${esc(p.name)}</div>
+          <div style="font-size:10px;color:var(--t3)">${letzte?esc(letzte.von)+': '+esc(letzte.text.slice(0,30)):'Noch keine Nachrichten'}</div>
+        </div>`;
+      }).join('')||'<div style="color:var(--t3);font-size:12px;padding:12px 0">Keine Projekte vorhanden</div>'}
+    </div>
+    <div class="card" style="display:flex;flex-direction:column;min-height:500px">
+      ${chatSelectedProjekt?`
+        <div class="card-hd"><span class="ct">${esc(chatSelectedProjekt)}</span></div>
+        <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+          ${nachrichtenFuer(chatSelectedProjekt).map(m=>`<div style="background:#F4F7FB;border-radius:10px;padding:8px 12px;max-width:70%;align-self:flex-start">
+            <div style="font-size:10px;color:var(--t3);font-weight:700">${esc(m.von)} · ${new Date(m.zeit).toLocaleString('de-DE')}</div>
+            <div style="font-size:13px">${esc(m.text)}</div>
+          </div>`).join('')||'<div style="color:var(--t3);text-align:center;padding:40px 0">Noch keine Chat-Nachrichten in diesem Projekt.</div>'}
+        </div>
+        <div style="display:flex;gap:8px">
+          <select id="chat_von" style="max-width:140px">${maOpts()}</select>
+          <input id="chat_input" placeholder="Nachricht schreiben..." style="flex:1" onkeydown="if(event.key==='Enter')sendChatMsg()">
+          <button class="btn bg2" onclick="sendChatMsg()">Senden</button>
+        </div>`
+      :`<div style="color:var(--t3);text-align:center;padding:60px 0">Wähle links ein Projekt, um den Chat zu öffnen.</div>`}
     </div>
   </div>`;
 }

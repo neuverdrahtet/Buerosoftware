@@ -234,6 +234,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);background:#fff
   <div class="ni" onclick="pg('kunden')"><span class="ic">👥</span>Kunden</div>
   <div class="ni" onclick="pg('anfragen')"><span class="ic">📩</span>Kundenanfragen</div>
   <div class="ni" onclick="pg('auftraege')"><span class="ic">🔧</span>Aufträge</div>
+  <div class="ni" onclick="pg('aufgaben')"><span class="ic">📝</span>Termine &amp; Aufgaben</div>
   <div class="ni" onclick="pg('objekte')"><span class="ic">🏢</span>Objekte</div>
   <div class="ni" onclick="pg('wartung')"><span class="ic">🔧</span>Wartung</div>
   <div class="sb-sec">Ressourcen</div>
@@ -291,7 +292,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);background:#fff
 // DATABASE
 // ════════════════════════════════════════════════════
 const DB={
-  kunden:[],anfragen:[],projekte:[],auftraege:[],objekte:[],wartungsvertraege:[],
+  kunden:[],anfragen:[],projekte:[],auftraege:[],objekte:[],wartungsvertraege:[],aufgaben:[],
   material:[],leistungen:[],angebote:[],ab:[],rechnungen:[],
   abschlag:[],lieferschein:[],mahnungen:[],zeitbuchungen:[],plantafel:[],
   buchhaltung:[],termine:[],mitarbeiter:['Danny Berger'],
@@ -532,7 +533,7 @@ const stat=(arr,cur)=>arr.map(s=>`<option${cur===s?' selected':''}>${s}</option>
 // ════════════════════════════════════════════════════
 // NAVIGATION
 // ════════════════════════════════════════════════════
-const TITLES={dashboard:'Dashboard',kalender:'Kalender',projekte_kanban:'Projekte',objekte:'Objekte',wartung:'Wartung',zeitadmin:'Zeit-Admin',angebote:'Angebote',ab:'Auftragsbestätigungen',rechnungen:'Rechnungen',abschlag:'Abschlagsrechnungen',lieferschein:'Lieferscheine',mahnungen:'Mahnungen',buchhaltung:'Buchhaltung',steuer:'Steuerberater-Export',kunden:'Kunden',anfragen:'Kundenanfragen',auftraege:'Aufträge',material:'Materialstamm',leistungen:'Leistungskatalog',plantafel:'Plantafel',zeiterfassung:'Zeiterfassung',einstellungen:'Firmendaten',integrationen:'Integrationen',email:'E-Mail (Gmail)'};
+const TITLES={dashboard:'Dashboard',kalender:'Kalender',projekte_kanban:'Projekte',objekte:'Objekte',wartung:'Wartung',zeitadmin:'Zeit-Admin',aufgaben:'Termine & Aufgaben',angebote:'Angebote',ab:'Auftragsbestätigungen',rechnungen:'Rechnungen',abschlag:'Abschlagsrechnungen',lieferschein:'Lieferscheine',mahnungen:'Mahnungen',buchhaltung:'Buchhaltung',steuer:'Steuerberater-Export',kunden:'Kunden',anfragen:'Kundenanfragen',auftraege:'Aufträge',material:'Materialstamm',leistungen:'Leistungskatalog',plantafel:'Plantafel',zeiterfassung:'Zeiterfassung',einstellungen:'Firmendaten',integrationen:'Integrationen',email:'E-Mail (Gmail)'};
 let curPage='dashboard';
 
 function pg(name){
@@ -550,7 +551,7 @@ function pg(name){
 }
 
 function renderPage(n){
-  const fns={dashboard:renderDash,kalender:renderKalender,projekte_kanban:renderKanban,objekte:renderObjekte,wartung:renderWartung,zeitadmin:renderZeitAdmin,kunden:renderKunden,anfragen:renderAnfragen,auftraege:renderAuftraege,material:renderMaterial,leistungen:renderLeistungen,plantafel:renderPlantafel,zeiterfassung:renderZeit,buchhaltung:renderBuchhaltung,steuer:renderSteuer,einstellungen:renderEinst,integrationen:renderIntegrationen,email:renderEmail};
+  const fns={dashboard:renderDash,kalender:renderKalender,projekte_kanban:renderKanban,objekte:renderObjekte,wartung:renderWartung,zeitadmin:renderZeitAdmin,aufgaben:renderAufgaben,kunden:renderKunden,anfragen:renderAnfragen,auftraege:renderAuftraege,material:renderMaterial,leistungen:renderLeistungen,plantafel:renderPlantafel,zeiterfassung:renderZeit,buchhaltung:renderBuchhaltung,steuer:renderSteuer,einstellungen:renderEinst,integrationen:renderIntegrationen,email:renderEmail};
   if(fns[n])fns[n]();
   else if(['angebote','ab','rechnungen','abschlag','lieferschein','mahnungen'].includes(n))renderDokList(n);
 }
@@ -2046,6 +2047,57 @@ function renderWartung(){
     <tbody>${rows||'<tr><td colspan="8" style="color:var(--t3);padding:16px">Noch keine Wartungsverträge.</td></tr>'}</tbody></table>
   </div>`;
 }
+function anyDate(s){if(!s)return null;if(s.includes('-'))return new Date(s);const[d,m,y]=s.split('.');return y?new Date(`${y}-${m}-${d}`):null;}
+let aufgabenTyp='alle',aufgabenNurOffen=true,aufgabenProjFilter='',aufgabenSuche='';
+function setAufgabenTyp(v){aufgabenTyp=v;renderAufgaben();}
+function setAufgabenProjFilter(v){aufgabenProjFilter=v;renderAufgaben();}
+function toggleAufgabenNurOffen(){aufgabenNurOffen=!aufgabenNurOffen;renderAufgaben();}
+function toggleAufgabeStatus(id){const a=DB.aufgaben.find(x=>x.id===id);if(a){a.status=a.status==='Erledigt'?'Offen':'Erledigt';save();renderAufgaben();}}
+function renderAufgaben(){
+  let items=[
+    ...DB.termine.map(t=>({_type:'Termin',id:t.id,titel:t.titel,datum:t.datum,projekt:'',prioritaet:'',status:''})),
+    ...DB.aufgaben.map(a=>({_type:'Aufgabe',id:a.id,titel:a.titel,datum:a.faellig,projekt:a.projekt||'',prioritaet:a.prioritaet||'Mittel',status:a.status||'Offen'}))
+  ];
+  if(aufgabenTyp!=='alle')items=items.filter(i=>i._type===(aufgabenTyp==='termin'?'Termin':'Aufgabe'));
+  if(aufgabenNurOffen)items=items.filter(i=>i._type==='Termin'||i.status!=='Erledigt');
+  if(aufgabenProjFilter)items=items.filter(i=>i._type==='Termin'||i.projekt===aufgabenProjFilter);
+  if(aufgabenSuche)items=items.filter(i=>i.titel.toLowerCase().includes(aufgabenSuche.toLowerCase()));
+  items.sort((a,b)=>{const da=anyDate(a.datum),db=anyDate(b.datum);if(!da&&!db)return 0;if(!da)return 1;if(!db)return -1;return da-db;});
+  const prioColor={'Hoch':'var(--red)','Mittel':'var(--orange)','Niedrig':'var(--t3)'};
+  const rows=items.map(i=>`<tr>
+    <td style="font-size:16px">${i._type==='Termin'?'📅':'✅'}</td>
+    <td>${i._type==='Aufgabe'?`<input type="checkbox" ${i.status==='Erledigt'?'checked':''} onchange="toggleAufgabeStatus('${i.id}')">`:''}</td>
+    <td style="${i._type==='Aufgabe'&&i.status==='Erledigt'?'text-decoration:line-through;color:var(--t3)':''}">${esc(i.titel||'–')}</td>
+    <td>${esc(i.projekt||'–')}</td>
+    <td>${i.datum?esc(i._type==='Aufgabe'?new Date(i.datum).toLocaleDateString('de-DE'):i.datum):'–'}</td>
+    <td>${i.prioritaet?`<span class="bdg" style="background:${prioColor[i.prioritaet]};color:#fff">${i.prioritaet}</span>`:''}</td>
+    <td><div style="display:flex;gap:3px"><button class="bic" onclick="openMod('${i._type==='Termin'?'termin':'aufgabe'}','${i.id}')">✏️</button><button class="bic" onclick="delIt('${i._type==='Termin'?'termine':'aufgaben'}','${i.id}')">🗑️</button></div></td>
+  </tr>`).join('');
+  document.getElementById('content').innerHTML=`<div class="card">
+    <div class="card-hd">
+      <span class="ct">📝 Termine &amp; Aufgaben</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn bo bsm" onclick="openMod('termin')">+ Termin</button>
+        <button class="btn bg2 bsm" onclick="openMod('aufgabe')">+ Aufgabe</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+      <input placeholder="🔍 Suchen..." oninput="aufgabenSuche=this.value;renderAufgaben()" style="max-width:220px">
+      <button class="btn ${aufgabenNurOffen?'bg2':'bo'} bsm" onclick="toggleAufgabenNurOffen()">Nur offene</button>
+      <select onchange="setAufgabenTyp(this.value)" style="max-width:160px">
+        <option value="alle">Alle Arten</option>
+        <option value="termin"${aufgabenTyp==='termin'?' selected':''}>Nur Termine</option>
+        <option value="aufgabe"${aufgabenTyp==='aufgabe'?' selected':''}>Nur Aufgaben</option>
+      </select>
+      <select onchange="setAufgabenProjFilter(this.value)" style="max-width:220px">
+        <option value="">Alle Projekte</option>
+        ${DB.projekte.map(p=>`<option${aufgabenProjFilter===p.name?' selected':''}>${esc(p.name)}</option>`).join('')}
+      </select>
+    </div>
+    <table class="dt"><thead><tr><th></th><th></th><th>Titel</th><th>Projekt</th><th>Datum</th><th>Priorität</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="7" style="color:var(--t3);padding:16px">Keine Termine oder Aufgaben</td></tr>'}</tbody></table>
+  </div>`;
+}
 function renderMaterial(){
   const rows=DB.material.map(m=>`<tr>
     <td style="font-weight:700;color:var(--gold)">${esc(m.artnr)}</td><td><b>${esc(m.name)}</b></td><td>${esc(m.kat)}</td>
@@ -2313,7 +2365,7 @@ function loadLogo(inp){const f=inp.files[0];if(!f)return;const r=new FileReader(
 // ════════════════════════════════════════════════════
 // MODAL STAMMDATEN
 // ════════════════════════════════════════════════════
-const T2A={kunde:'kunden',anfrage:'anfragen',projekt:'projekte',auftrag:'auftraege',objekt:'objekte',wartungsvertrag:'wartungsvertraege',material:'material',leistung:'leistungen',plantafel:'plantafel',buchung:'buchhaltung',termin:'termine'};
+const T2A={kunde:'kunden',anfrage:'anfragen',projekt:'projekte',auftrag:'auftraege',objekt:'objekte',wartungsvertrag:'wartungsvertraege',aufgabe:'aufgaben',material:'material',leistung:'leistungen',plantafel:'plantafel',buchung:'buchhaltung',termin:'termine'};
 const ANFRAGE_STATI=['Neu','Geprüft','Termin geplant','Angebot in Arbeit','Angebot gesendet','Nachfassen','Gewonnen','Verloren'];
 const ANFRAGE_STATI_AKTIV=ANFRAGE_STATI.filter(s=>s!=='Gewonnen'&&s!=='Verloren');
 const ANFRAGE_FARBEN={'Neu':'var(--navy)','Geprüft':'var(--purple)','Termin geplant':'var(--orange)','Angebot in Arbeit':'var(--gold)','Angebot gesendet':'var(--gold)','Nachfassen':'var(--red)','Gewonnen':'var(--green)','Verloren':'var(--t3)'};
@@ -2323,7 +2375,7 @@ function openMod(type,id=null,...ex){
   curMT=type;curMId=id;
   const item=id?DB[T2A[type]]?.find(x=>x.id===id):{};
   document.getElementById('modal_ov').classList.add('open');
-  document.getElementById('modal_ttl').textContent=(id?'Bearbeiten: ':'Neu: ')+{kunde:'Kunde',anfrage:'Kundenanfrage',projekt:'Projekt',auftrag:'Auftrag',objekt:'Objekt',wartungsvertrag:'Wartungsvertrag',material:'Material',leistung:'Leistung',plantafel:'Plantafel-Eintrag',buchung:'Buchung',termin:'Termin'}[type];
+  document.getElementById('modal_ttl').textContent=(id?'Bearbeiten: ':'Neu: ')+{kunde:'Kunde',anfrage:'Kundenanfrage',projekt:'Projekt',auftrag:'Auftrag',objekt:'Objekt',wartungsvertrag:'Wartungsvertrag',aufgabe:'Aufgabe',material:'Material',leistung:'Leistung',plantafel:'Plantafel-Eintrag',buchung:'Buchung',termin:'Termin'}[type];
   document.getElementById('modal_body').innerHTML=modBody(type,item||{},ex);
 }
 function closeModal(){document.getElementById('modal_ov').classList.remove('open');}
@@ -2384,6 +2436,14 @@ function modBody(type,d,ex){
     <div class="f"><label>Nächster Termin</label><input id="m_naechster" value="${esc(d.naechster||'')}"></div>
     <div class="f"><label>Status</label><select id="m_stat">${stat(['Aktiv','Pausiert','Gekündigt'],d.status||'Aktiv')}</select></div>
   </div><div class="f" style="margin-top:10px"><label>Notiz</label><textarea id="m_notiz" rows="2">${esc(d.notiz||'')}</textarea></div>`;
+  if(type==='aufgabe')return`<div class="g2">
+    <div class="f"><label>Titel *</label><input id="m_titel" value="${esc(d.titel||'')}"></div>
+    <div class="f"><label>Projekt</label><select id="m_proj"><option value="">– kein –</option>${pOpts(d.projekt||'')}</select></div>
+    <div class="f"><label>Fällig am</label><input type="date" id="m_faellig" value="${d.faellig||ex[0]||''}"></div>
+    <div class="f"><label>Priorität</label><select id="m_prio">${stat(['Niedrig','Mittel','Hoch'],d.prioritaet||'Mittel')}</select></div>
+    <div class="f"><label>Zuständig</label><select id="m_ma">${maOpts(d.zustaendig)}</select></div>
+    <div class="f"><label>Wiederkehrend</label><select id="m_wiederk">${stat(['Nein','Täglich','Wöchentlich','Monatlich'],d.wiederkehrend||'Nein')}</select></div>
+  </div><div class="f" style="margin-top:10px"><label>Notiz</label><textarea id="m_notiz" rows="2">${esc(d.notiz||'')}</textarea></div>`;
   if(type==='material')return`<div class="g2">
     <div class="f"><label>Art.-Nr.</label><input id="m_artnr" value="${esc(d.artnr||'')}"></div>
     <div class="f"><label>Bezeichnung *</label><input id="m_name" value="${esc(d.name||'')}"></div>
@@ -2440,6 +2500,7 @@ function modalOK(){
   else if(t==='auftrag')Object.assign(item,{titel:gv('m_titel'),kunde:gv('m_kunde'),gewerk:gv('m_gew'),termin:gv('m_term'),ma:gv('m_ma'),status:gv('m_stat'),notiz:gv('m_notiz'),nr:item.nr||'A-'+(1000+DB.auftraege.length+1)});
   else if(t==='objekt')Object.assign(item,{name:gv('m_name'),typ:gv('m_typ'),kunde:gv('m_kunde'),strasse:gv('m_str'),ort:gv('m_ort'),baujahr:gv('m_baujahr'),notiz:gv('m_notiz')});
   else if(t==='wartungsvertrag')Object.assign(item,{kunde:gv('m_kunde'),objekt:gv('m_obj'),seriennr:gv('m_seriennr'),intervall:gv('m_intervall'),naechster:gv('m_naechster'),status:gv('m_stat'),notiz:gv('m_notiz'),nr:item.nr||'WV-'+(1000+DB.wartungsvertraege.length+1)});
+  else if(t==='aufgabe')Object.assign(item,{titel:gv('m_titel'),projekt:gv('m_proj'),faellig:gv('m_faellig'),prioritaet:gv('m_prio'),zustaendig:gv('m_ma'),wiederkehrend:gv('m_wiederk'),notiz:gv('m_notiz'),status:item.status||'Offen'});
   else if(t==='material')Object.assign(item,{artnr:gv('m_artnr'),name:gv('m_name'),kat:gv('m_kat'),einheit:gv('m_ein'),ek:parseFloat(gv('m_ek'))||0,vk:parseFloat(gv('m_vk'))||0,lief:gv('m_lief'),mind:parseFloat(gv('m_mind'))||0});
   else if(t==='leistung')Object.assign(item,{nr:gv('m_nr'),name:gv('m_name'),gewerk:gv('m_gew'),einheit:gv('m_ein'),std:parseFloat(gv('m_std'))||1,preis:parseFloat(gv('m_preis'))||0});
   else if(t==='plantafel')Object.assign(item,{ma:gv('m_ma'),datum:gv('m_dat'),typ:gv('m_typ'),von:gv('m_von'),bis:gv('m_bis'),projekt:gv('m_proj')});

@@ -219,7 +219,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);background:#fff
   <div class="sb-sec">Übersicht</div>
   <div class="ni active" onclick="pg('dashboard')"><span class="ic">🏠</span>Dashboard</div>
   <div class="ni" onclick="pg('kalender')"><span class="ic">📅</span>Kalender</div>
-  <div class="ni" onclick="pg('projekte_kanban')"><span class="ic">📊</span>Projekte / Kanban</div>
+  <div class="ni" onclick="pg('projekte_kanban')"><span class="ic">📊</span>Projekte</div>
   <div class="sb-sec">Dokumente</div>
   <div class="ni" onclick="pg('angebote')"><span class="ic">📋</span>Angebote</div>
   <div class="ni" onclick="pg('ab')"><span class="ic">✅</span>Auftragsbestätigung</div>
@@ -529,7 +529,7 @@ const stat=(arr,cur)=>arr.map(s=>`<option${cur===s?' selected':''}>${s}</option>
 // ════════════════════════════════════════════════════
 // NAVIGATION
 // ════════════════════════════════════════════════════
-const TITLES={dashboard:'Dashboard',kalender:'Kalender',projekte_kanban:'Projekte & Kanban',angebote:'Angebote',ab:'Auftragsbestätigungen',rechnungen:'Rechnungen',abschlag:'Abschlagsrechnungen',lieferschein:'Lieferscheine',mahnungen:'Mahnungen',buchhaltung:'Buchhaltung',steuer:'Steuerberater-Export',kunden:'Kunden',anfragen:'Kundenanfragen',auftraege:'Aufträge',material:'Materialstamm',leistungen:'Leistungskatalog',plantafel:'Plantafel',zeiterfassung:'Zeiterfassung',einstellungen:'Firmendaten',integrationen:'Integrationen',email:'E-Mail (Gmail)'};
+const TITLES={dashboard:'Dashboard',kalender:'Kalender',projekte_kanban:'Projekte',angebote:'Angebote',ab:'Auftragsbestätigungen',rechnungen:'Rechnungen',abschlag:'Abschlagsrechnungen',lieferschein:'Lieferscheine',mahnungen:'Mahnungen',buchhaltung:'Buchhaltung',steuer:'Steuerberater-Export',kunden:'Kunden',anfragen:'Kundenanfragen',auftraege:'Aufträge',material:'Materialstamm',leistungen:'Leistungskatalog',plantafel:'Plantafel',zeiterfassung:'Zeiterfassung',einstellungen:'Firmendaten',integrationen:'Integrationen',email:'E-Mail (Gmail)'};
 let curPage='dashboard';
 
 function pg(name){
@@ -562,60 +562,75 @@ function renderDash(){
   const einnahmen=DB.buchhaltung.filter(b=>b.typ==='Einnahme'&&b.datum&&new Date(b.datum.split('.').reverse().join('-')).getMonth()===monat).reduce((s,b)=>s+(+b.betrag||0),0);
   const ausgaben=DB.buchhaltung.filter(b=>b.typ==='Ausgabe'&&b.datum&&new Date(b.datum.split('.').reverse().join('-')).getMonth()===monat).reduce((s,b)=>s+(+b.betrag||0),0);
   const gewinn=einnahmen-ausgaben;
-  const offMahn=DB.mahnungen.filter(m=>m.status==='offen');
-  const aktAuf=DB.auftraege.filter(a=>a.status==='in Bearbeitung');
+  const laufendeProjekte=DB.projekte.filter(p=>p.status==='In Bearbeitung').length;
+  const offeneAngebote=DB.angebote.filter(a=>(a.status||'offen')==='offen').length;
+  const gesicherteAuftraege=DB.auftraege.filter(a=>['Auftrag','In Arbeit','Abgeschlossen'].includes(a.status)).length;
+  const siebenTageAgo=new Date();siebenTageAgo.setDate(siebenTageAgo.getDate()-7);
+  const erfassteZeitKW=DB.zeitbuchungen.filter(z=>z.datum&&new Date(z.datum.split('.').reverse().join('-'))>=siebenTageAgo).reduce((s,z)=>s+(+z.stunden||0),0);
   const naechsteTermine=DB.termine.filter(t=>t.datum).sort((a,b)=>a.datum>b.datum?1:-1).slice(0,4);
   const letzteBuchungen=DB.buchhaltung.slice(-5).reverse();
+  const brauchtAufmerksamkeit=[
+    ...DB.anfragen.filter(a=>a.status==='Nachfassen').map(a=>({txt:`Nachfassen: ${a.betreff||'Anfrage'} (${a.kunde||''})`,fn:`openMod('anfrage','${a.id}')`})),
+    ...offRe.filter(r=>r.faelligkeit&&new Date(r.faelligkeit.split('.').reverse().join('-'))<new Date()).map(r=>({txt:`Überfällig: Rechnung ${r.nr||''} (${r.kunde||''})`,fn:`openDok('rechnung','${r.id}')`})),
+    ...DB.mahnungen.filter(m=>m.status==='offen').map(m=>({txt:`Offene Mahnung: ${m.nr||''} (${m.kunde||''})`,fn:`openDok('mahnung','${m.id}')`}))
+  ].slice(0,6);
 
   document.getElementById('content').innerHTML=`
   <div class="gold-bar"></div>
   <!-- STAT CARDS -->
-  <div class="sg">
-    <div class="sc" onclick="pg('buchhaltung')">
-      <div class="sc-accent" style="background:linear-gradient(90deg,var(--green),var(--gold))"></div>
-      <div class="sc-icon" style="background:var(--green-bg)">💰</div>
-      <div class="sc-val" style="color:var(--green)">${fmtN(einnahmen)} €</div>
-      <div class="sc-lbl">Einnahmen ${new Date().toLocaleString('de-DE',{month:'long'})}</div>
-      <div class="sc-sub" style="color:var(--green)">Gewinn: ${fmt(gewinn)}</div>
+  <div class="sg" style="grid-template-columns:repeat(5,1fr)">
+    <div class="sc" onclick="pg('projekte_kanban')">
+      <div class="sc-accent" style="background:linear-gradient(90deg,var(--navy),var(--gold))"></div>
+      <div class="sc-icon" style="background:var(--blue-bg)">📁</div>
+      <div class="sc-val" style="color:var(--navy)">${laufendeProjekte}</div>
+      <div class="sc-lbl">Laufende Projekte</div>
+      <div class="sc-sub" style="color:var(--t3)">${DB.projekte.length} gesamt</div>
+    </div>
+    <div class="sc" onclick="pg('angebote')">
+      <div class="sc-accent" style="background:linear-gradient(90deg,var(--purple),var(--navy))"></div>
+      <div class="sc-icon" style="background:var(--purple-bg)">📋</div>
+      <div class="sc-val" style="color:var(--purple)">${offeneAngebote}</div>
+      <div class="sc-lbl">Offene Angebote</div>
+      <div class="sc-sub" style="color:var(--t3)">${DB.angebote.length} gesamt</div>
+    </div>
+    <div class="sc" onclick="pg('auftraege')">
+      <div class="sc-accent" style="background:linear-gradient(90deg,var(--gold),var(--green))"></div>
+      <div class="sc-icon" style="background:var(--green-bg)">🔧</div>
+      <div class="sc-val" style="color:var(--green)">${gesicherteAuftraege}</div>
+      <div class="sc-lbl">Gesicherte Aufträge</div>
+      <div class="sc-sub" style="color:var(--t3)">${DB.auftraege.length} gesamt</div>
     </div>
     <div class="sc" onclick="pg('rechnungen')">
       <div class="sc-accent" style="background:linear-gradient(90deg,var(--red),var(--orange))"></div>
       <div class="sc-icon" style="background:var(--red-bg)">🧾</div>
-      <div class="sc-val" style="color:var(--red)">${offRe.length}</div>
-      <div class="sc-lbl">Offene Rechnungen</div>
-      <div class="sc-sub" style="color:var(--red)">${fmt(offReBrt)} offen</div>
+      <div class="sc-val" style="color:var(--red)">${fmtN(offReBrt)} €</div>
+      <div class="sc-lbl">Offene Forderungen</div>
+      <div class="sc-sub" style="color:var(--red)">${offRe.length} Rechnung(en)</div>
     </div>
-    <div class="sc" onclick="pg('auftraege')">
-      <div class="sc-accent" style="background:linear-gradient(90deg,var(--navy),var(--gold))"></div>
-      <div class="sc-icon" style="background:var(--blue-bg)">🔧</div>
-      <div class="sc-val" style="color:var(--navy)">${aktAuf.length}</div>
-      <div class="sc-lbl">Aktive Aufträge</div>
-      <div class="sc-sub" style="color:var(--t3)">${DB.projekte.filter(p=>p.status==='aktiv').length} Projekte aktiv</div>
-    </div>
-    <div class="sc" onclick="pg('mahnungen')">
-      <div class="sc-accent" style="background:linear-gradient(90deg,var(--orange),var(--red))"></div>
-      <div class="sc-icon" style="background:var(--orange-bg)">⚠️</div>
-      <div class="sc-val" style="color:var(--orange)">${offMahn.length}</div>
-      <div class="sc-lbl">Offene Mahnungen</div>
-      <div class="sc-sub" style="color:var(--t3)">${DB.kunden.length} Kunden gesamt</div>
+    <div class="sc" onclick="pg('zeiterfassung')">
+      <div class="sc-accent" style="background:linear-gradient(90deg,var(--orange),var(--gold))"></div>
+      <div class="sc-icon" style="background:var(--orange-bg)">⏱️</div>
+      <div class="sc-val" style="color:var(--orange)">${erfassteZeitKW.toFixed(1)} h</div>
+      <div class="sc-lbl">Erfasste Zeit (7 Tage)</div>
+      <div class="sc-sub" style="color:var(--t3)">${DB.mahnungen.filter(m=>m.status==='offen').length} offene Mahnung(en)</div>
     </div>
   </div>
 
-  <!-- KANBAN MINI + TERMINE -->
+  <!-- KUNDENANFRAGEN-FUNNEL + BRAUCHT AUFMERKSAMKEIT -->
   <div class="g-dash">
-    <!-- MINI KANBAN -->
+    <!-- KUNDENANFRAGEN FUNNEL -->
     <div class="card" style="grid-column:1/3">
       <div class="card-hd">
-        <span class="ct">Auftrags-Übersicht</span>
-        <button class="btn bg2 bsm" onclick="pg('projekte_kanban')">Vollansicht →</button>
+        <span class="ct">Kundenanfragen – Vertrieb</span>
+        <button class="btn bg2 bsm" onclick="pg('anfragen')">Vollansicht →</button>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
-        ${['Anfrage','Angebot','Auftrag','In Arbeit','Abgeschlossen'].map(s=>{
-          const items=DB.auftraege.filter(a=>a.status===s).concat(DB.anfragen.filter(a=>a.status===s));
+      <div style="display:grid;grid-template-columns:repeat(${ANFRAGE_STATI_AKTIV.length},1fr);gap:8px">
+        ${ANFRAGE_STATI_AKTIV.map(s=>{
+          const items=DB.anfragen.filter(a=>a.status===s);
           return `<div style="background:#F4F7FB;border-radius:10px;padding:10px">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t2);margin-bottom:8px">${s} <span style="background:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:8px;color:var(--t2)">${items.length}</span></div>
             ${items.slice(0,3).map(i=>`<div style="background:#fff;border-radius:7px;padding:8px 10px;margin-bottom:6px;border-left:3px solid var(--gold);box-shadow:0 1px 4px rgba(0,0,0,.06)">
-              <div style="font-weight:600;font-size:11px">${esc(i.titel||i.betreff||'–')}</div>
+              <div style="font-weight:600;font-size:11px">${esc(i.betreff||'–')}</div>
               <div style="font-size:10px;color:var(--t3);margin-top:2px">${esc(i.kunde||'')}</div>
             </div>`).join('')}
             ${items.length>3?`<div style="font-size:10px;color:var(--t3);text-align:center">+${items.length-3} weitere</div>`:''}
@@ -624,18 +639,27 @@ function renderDash(){
       </div>
     </div>
 
-    <!-- TERMINE -->
+    <!-- BRAUCHT AUFMERKSAMKEIT -->
     <div class="card">
-      <div class="card-hd">
-        <span class="ct">Nächste Termine</span>
-        <button class="btn bo bsm" onclick="openMod('termin')">+ Termin</button>
-      </div>
-      ${naechsteTermine.length?naechsteTermine.map(t=>`<div class="bh-row">
-        <div class="bh-type" style="background:${t.typ==='Kundentermin'?'var(--blue-bg)':t.typ==='Abnahme'?'var(--green-bg)':'var(--purple-bg)'}">📅</div>
-        <div class="bh-info"><div class="bh-title">${esc(t.titel||'–')}</div><div class="bh-sub">${esc(t.datum||'')} ${esc(t.uhrzeit||'')} · ${esc(t.ort||'')}</div></div>
-        <span class="bdg bg-b">${esc(t.typ||'')}</span>
-      </div>`).join(''):`<div style="color:var(--t3);text-align:center;padding:20px 0;font-size:12px">Keine Termine geplant</div>`}
+      <div class="card-hd"><span class="ct">Braucht Aufmerksamkeit</span></div>
+      ${brauchtAufmerksamkeit.length?brauchtAufmerksamkeit.map(b=>`<div class="bh-row" style="cursor:pointer" onclick="${b.fn}">
+        <div class="bh-type" style="background:var(--orange-bg)">⚠️</div>
+        <div class="bh-info"><div class="bh-title">${esc(b.txt)}</div></div>
+      </div>`).join(''):`<div style="color:var(--t3);text-align:center;padding:20px 0;font-size:12px">Alles ruhig – nichts braucht gerade Aufmerksamkeit</div>`}
     </div>
+  </div>
+
+  <!-- NÄCHSTE TERMINE -->
+  <div class="card">
+    <div class="card-hd">
+      <span class="ct">Nächste Termine</span>
+      <button class="btn bo bsm" onclick="openMod('termin')">+ Termin</button>
+    </div>
+    ${naechsteTermine.length?naechsteTermine.map(t=>`<div class="bh-row">
+      <div class="bh-type" style="background:${t.typ==='Kundentermin'?'var(--blue-bg)':t.typ==='Abnahme'?'var(--green-bg)':'var(--purple-bg)'}">📅</div>
+      <div class="bh-info"><div class="bh-title">${esc(t.titel||'–')}</div><div class="bh-sub">${esc(t.datum||'')} ${esc(t.uhrzeit||'')} · ${esc(t.ort||'')}</div></div>
+      <span class="bdg bg-b">${esc(t.typ||'')}</span>
+    </div>`).join(''):`<div style="color:var(--t3);text-align:center;padding:20px 0;font-size:12px">Keine Termine geplant</div>`}
   </div>
 
   <!-- EINNAHMEN CHART + LETZTE BUCHUNGEN -->
@@ -744,65 +768,68 @@ function renderKalender(){
 // ════════════════════════════════════════════════════
 // KANBAN
 // ════════════════════════════════════════════════════
+let projView='kanban';
+function setProjView(v){projView=v;renderKanban();}
+function projToggleBtns(){return`<div style="display:flex;gap:8px;align-items:center">
+  <button class="btn ${projView==='kanban'?'bg2':'bo'} bsm" onclick="setProjView('kanban')">▦ Kanban</button>
+  <button class="btn ${projView==='liste'?'bg2':'bo'} bsm" onclick="setProjView('liste')">☰ Liste</button>
+  <button class="btn bg2 bsm" onclick="openMod('projekt')">+ Projekt</button>
+</div>`;}
 function renderKanban(){
-  const cols=['Anfrage','Angebot','Auftrag','In Arbeit','Abgeschlossen'];
-  const colColors={'Anfrage':'var(--t3)','Angebot':'var(--navy)','Auftrag':'var(--gold)','In Arbeit':'var(--orange)','Abgeschlossen':'var(--green)'};
-  const allItems=[
-    ...DB.auftraege.map(a=>({...a,_type:'auftrag'})),
-    ...DB.anfragen.map(a=>({...a,_type:'anfrage',status:a.status==='neu'?'Anfrage':a.status==='Angebot erstellt'?'Angebot':a.status==='abgeschlossen'?'Abgeschlossen':'Anfrage'}))
-  ];
+  if(projView==='liste'){renderProjekteListe();return;}
   document.getElementById('content').innerHTML=`
   <div class="card" style="overflow:visible">
     <div class="card-hd">
-      <span class="ct">Projekte & Aufträge – Kanban</span>
-      <div style="display:flex;gap:8px">
-        <button class="btn bo bsm" onclick="openMod('anfrage')">+ Anfrage</button>
-        <button class="btn bg2 bsm" onclick="openMod('auftrag')">+ Auftrag</button>
-      </div>
+      <span class="ct">Projekte</span>
+      ${projToggleBtns()}
     </div>
-    <div class="kanban" id="kanban_board">
-      ${cols.map(col=>`
-      <div class="kb-col" data-col="${col}" ondrop="drop(event,'${col}')" ondragover="allowDrop(event)">
+    <div class="kanban" id="kanban_board" style="grid-template-columns:repeat(${PROJEKT_STATI.length},1fr)">
+      ${PROJEKT_STATI.map(col=>`
+      <div class="kb-col" data-col="${col}" ondrop="dropK(event,'${col}','projekte',renderKanban)" ondragover="allowDrop(event)">
         <div class="kb-col-hd">
-          <span style="width:8px;height:8px;border-radius:50%;background:${colColors[col]};display:inline-block"></span>
-          ${col} <span class="kb-cnt">${allItems.filter(i=>i.status===col).length}</span>
+          <span style="width:8px;height:8px;border-radius:50%;background:${PROJEKT_FARBEN[col]};display:inline-block"></span>
+          ${col} <span class="kb-cnt">${DB.projekte.filter(p=>p.status===col).length}</span>
         </div>
-        ${allItems.filter(i=>i.status===col).map(i=>`
-        <div class="kb-card" draggable="true" ondragstart="drag(event,'${i.id}','${i._type}')" id="kb_${i.id}">
-          <div class="kb-card-title">${esc(i.titel||i.betreff||'–')}</div>
-          <div class="kb-card-sub">${esc(i.kunde||'–')}</div>
+        ${DB.projekte.filter(p=>p.status===col).map(p=>`
+        <div class="kb-card" draggable="true" ondragstart="dragK(event,'${p.id}')" id="kb_${p.id}" onclick="openMod('projekt','${p.id}')">
+          <div class="kb-card-title">${esc(p.name||'–')}</div>
+          <div class="kb-card-sub">${esc(p.kunde||'–')}</div>
           <div class="kb-card-foot">
-            <span class="bdg bg-gr" style="font-size:9px">${esc(i.gewerk||i._type)}</span>
-            <span style="font-size:10px;color:var(--t3)">${esc(i.termin||i.datum||'')}</span>
+            <span class="bdg bg-gr" style="font-size:9px">${esc(p.nr||'')}</span>
+            <span style="font-size:10px;color:var(--t3)">${fmt(p.budget)}</span>
           </div>
         </div>`).join('')}
-        <button class="badd" style="font-size:11px;padding:6px" onclick="${col==='Anfrage'?"openMod('anfrage')":`openMod('auftrag')`}">+</button>
+        <button class="badd" style="font-size:11px;padding:6px" onclick="openMod('projekt')">+</button>
       </div>`).join('')}
     </div>
-  </div>
-  <!-- PROJEKTE LISTE -->
+  </div>`;
+}
+function renderProjekteListe(){
+  document.getElementById('content').innerHTML=`
   <div class="card">
-    <div class="card-hd"><span class="ct">Projekte</span><button class="btn bg2 bsm" onclick="openMod('projekt')">+ Projekt</button></div>
+    <div class="card-hd">
+      <span class="ct">Projekte</span>
+      ${projToggleBtns()}
+    </div>
     <table class="dt"><thead><tr><th>Nr.</th><th>Bezeichnung</th><th>Kunde</th><th>Zeitraum</th><th>Status</th><th>Budget</th><th></th></tr></thead>
     <tbody>${DB.projekte.map(p=>`<tr>
       <td style="font-weight:700;color:var(--gold)">${esc(p.nr)}</td>
       <td><b>${esc(p.name)}</b><div style="font-size:10px;color:var(--t3)">${esc(p.beschr||'')}</div></td>
       <td>${esc(p.kunde)}</td><td>${esc(p.beginn)} – ${esc(p.ende||'lfd.')}</td>
-      <td><span class="bdg ${p.status==='aktiv'?'bg-g':p.status==='abgeschlossen'?'bg-gr':'bg-o'}">${esc(p.status)}</span></td>
+      <td><span class="bdg" style="background:${PROJEKT_FARBEN[p.status]||'var(--t3)'};color:#fff">${esc(p.status||'Entwurf')}</span></td>
       <td style="font-weight:600">${fmt(p.budget)}</td>
       <td><div style="display:flex;gap:3px"><button class="bic" onclick="openMod('projekt','${p.id}')">✏️</button><button class="bic" onclick="delIt('projekte','${p.id}')">🗑️</button></div></td>
     </tr>`).join('')||'<tr><td colspan="7" style="color:var(--t3);padding:16px">Keine Projekte</td></tr>'}</tbody></table>
   </div>`;
 }
 
-function drag(e,id,type){e.dataTransfer.setData('id',id);e.dataTransfer.setData('type',type);}
+function dragK(e,id){e.dataTransfer.setData('id',id);}
 function allowDrop(e){e.preventDefault();e.currentTarget.classList.add('drag-over');}
-function drop(e,col){
+function dropK(e,col,arrName,rerender){
   e.preventDefault();e.currentTarget.classList.remove('drag-over');
-  const id=e.dataTransfer.getData('id'),type=e.dataTransfer.getData('type');
-  const arr=type==='anfrage'?DB.anfragen:DB.auftraege;
-  const item=arr.find(x=>x.id===id);
-  if(item){item.status=col;save();renderKanban();}
+  const id=e.dataTransfer.getData('id');
+  const item=DB[arrName].find(x=>x.id===id);
+  if(item){item.status=col;save();rerender();}
 }
 
 // ════════════════════════════════════════════════════
@@ -1596,7 +1623,7 @@ function saveEmailAsAnfrage(threadId){
   const senderEmail=from.match(/<(.+)>/)?.[1]||from;
   const senderName=from.replace(/<[^>]+>/,'').replace(/"/g,'').trim()||senderEmail;
   if(DB.anfragen.find(a=>a.betreff===subject)){alert('Bereits als Anfrage gespeichert.');return;}
-  DB.anfragen.push({id:uid(),datum:today(),kunde:senderName,betreff:subject,gewerk:'Sonstiges',weg:'E-Mail',status:'neu',notiz:`Von: ${senderEmail}\n\n${t.snippet||''}`});
+  DB.anfragen.push({id:uid(),datum:today(),kunde:senderName,betreff:subject,gewerk:'Sonstiges',weg:'E-Mail',status:'Neu',notiz:`Von: ${senderEmail}\n\n${t.snippet||''}`});
   save();alert(`✓ Als Anfrage gespeichert:\n"${subject}"`);
 }
 
@@ -1876,11 +1903,42 @@ function renderKunden(){
     <tbody id="k_tb">${rows||'<tr><td colspan="7" style="color:var(--t3);padding:16px">Noch keine Kunden</td></tr>'}</tbody></table></div>`;
 }
 function renderAnfragen(){
-  const rows=DB.anfragen.map(a=>`<tr><td>${esc(a.datum)}</td><td><b>${esc(a.kunde)}</b></td><td>${esc(a.betreff)}</td><td>${esc(a.gewerk)}</td>
-    <td><span class="bdg ${a.status==='neu'?'bg-b':a.status==='in Bearbeitung'?'bg-o':a.status==='Angebot erstellt'?'bg-g':'bg-gr'}">${esc(a.status)}</span></td>
-    <td><div style="display:flex;gap:3px"><button class="bic" onclick="openMod('anfrage','${a.id}')">✏️</button><button class="bic" onclick="openDok('angebot',null,'${esc(a.kunde)}','${esc(a.betreff)}')">📋</button><button class="bic" onclick="delIt('anfragen','${a.id}')">🗑️</button></div></td></tr>`).join('');
-  document.getElementById('content').innerHTML=`<div class="card"><table class="dt"><thead><tr><th>Datum</th><th>Kunde</th><th>Betreff</th><th>Gewerk</th><th>Status</th><th></th></tr></thead>
-    <tbody>${rows||'<tr><td colspan="6" style="color:var(--t3);padding:16px">Keine Anfragen</td></tr>'}</tbody></table></div>`;
+  const abgeschlossen=DB.anfragen.filter(a=>a.status==='Gewonnen'||a.status==='Verloren');
+  document.getElementById('content').innerHTML=`
+  <div class="card" style="overflow:visible">
+    <div class="card-hd">
+      <span class="ct">Kundenanfragen</span>
+      <button class="btn bg2 bsm" onclick="openMod('anfrage')">+ Anfrage</button>
+    </div>
+    <div class="kanban" id="anfragen_board" style="grid-template-columns:repeat(${ANFRAGE_STATI_AKTIV.length},1fr)">
+      ${ANFRAGE_STATI_AKTIV.map(col=>`
+      <div class="kb-col" data-col="${col}" ondrop="dropK(event,'${col}','anfragen',renderAnfragen)" ondragover="allowDrop(event)">
+        <div class="kb-col-hd">
+          <span style="width:8px;height:8px;border-radius:50%;background:${ANFRAGE_FARBEN[col]};display:inline-block"></span>
+          ${col} <span class="kb-cnt">${DB.anfragen.filter(a=>a.status===col).length}</span>
+        </div>
+        ${DB.anfragen.filter(a=>a.status===col).map(a=>`
+        <div class="kb-card" draggable="true" ondragstart="dragK(event,'${a.id}')" id="kb_${a.id}" onclick="openMod('anfrage','${a.id}')">
+          <div class="kb-card-title">${esc(a.betreff||'–')}</div>
+          <div class="kb-card-sub">${esc(a.kunde||'–')}</div>
+          <div class="kb-card-foot">
+            <span class="bdg bg-gr" style="font-size:9px">${esc(a.gewerk||'')}</span>
+            <span style="font-size:10px;color:var(--t3)">${esc(a.datum||'')}</span>
+          </div>
+        </div>`).join('')}
+        <button class="badd" style="font-size:11px;padding:6px" onclick="openMod('anfrage')">+</button>
+      </div>`).join('')}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><span class="ct">Gewonnen / Verloren</span></div>
+    <table class="dt"><thead><tr><th>Datum</th><th>Kunde</th><th>Betreff</th><th>Status</th><th></th></tr></thead>
+    <tbody>${abgeschlossen.map(a=>`<tr>
+      <td>${esc(a.datum)}</td><td><b>${esc(a.kunde)}</b></td><td>${esc(a.betreff)}</td>
+      <td><span class="bdg ${a.status==='Gewonnen'?'bg-g':'bg-gr'}">${esc(a.status)}</span></td>
+      <td><div style="display:flex;gap:3px"><button class="bic" onclick="openMod('anfrage','${a.id}')">✏️</button><button class="bic" onclick="openDok('angebot',null,'${esc(a.kunde)}','${esc(a.betreff)}')">📋</button><button class="bic" onclick="delIt('anfragen','${a.id}')">🗑️</button></div></td>
+    </tr>`).join('')||'<tr><td colspan="5" style="color:var(--t3);padding:16px">Noch keine gewonnenen/verlorenen Anfragen</td></tr>'}</tbody></table>
+  </div>`;
 }
 function renderAuftraege(){
   const rows=DB.auftraege.map(a=>`<tr>
@@ -2028,6 +2086,11 @@ function loadLogo(inp){const f=inp.files[0];if(!f)return;const r=new FileReader(
 // MODAL STAMMDATEN
 // ════════════════════════════════════════════════════
 const T2A={kunde:'kunden',anfrage:'anfragen',projekt:'projekte',auftrag:'auftraege',material:'material',leistung:'leistungen',plantafel:'plantafel',buchung:'buchhaltung',termin:'termine'};
+const ANFRAGE_STATI=['Neu','Geprüft','Termin geplant','Angebot in Arbeit','Angebot gesendet','Nachfassen','Gewonnen','Verloren'];
+const ANFRAGE_STATI_AKTIV=ANFRAGE_STATI.filter(s=>s!=='Gewonnen'&&s!=='Verloren');
+const ANFRAGE_FARBEN={'Neu':'var(--navy)','Geprüft':'var(--purple)','Termin geplant':'var(--orange)','Angebot in Arbeit':'var(--gold)','Angebot gesendet':'var(--gold)','Nachfassen':'var(--red)','Gewonnen':'var(--green)','Verloren':'var(--t3)'};
+const PROJEKT_STATI=['Entwurf','Planung','In Bearbeitung','Pausiert','Abgeschlossen','Storniert'];
+const PROJEKT_FARBEN={'Entwurf':'var(--t3)','Planung':'var(--navy)','In Bearbeitung':'var(--orange)','Pausiert':'var(--purple)','Abgeschlossen':'var(--green)','Storniert':'var(--red)'};
 function openMod(type,id=null,...ex){
   curMT=type;curMId=id;
   const item=id?DB[T2A[type]]?.find(x=>x.id===id):{};
@@ -2058,14 +2121,14 @@ function modBody(type,d,ex){
     <div class="f"><label>Betreff</label><input id="m_betr" value="${esc(d.betreff||'')}"></div>
     <div class="f"><label>Gewerk</label><select id="m_gew">${stat(['Elektriker','DGUV V3/V4','Badsanierung','Maler','Trockenbau','Fliesenleger','Bodenleger','Elektrosanierung','Wohnungsrenovierung','Sonstiges'],d.gewerk||'Elektriker')}</select></div>
     <div class="f"><label>Kontaktweg</label><select id="m_weg">${stat(['Telefon','E-Mail','WhatsApp','Website','Empfehlung'],d.weg||'Telefon')}</select></div>
-    <div class="f"><label>Status</label><select id="m_stat">${stat(['neu','in Bearbeitung','Angebot erstellt','abgeschlossen','abgesagt'],d.status||'neu')}</select></div>
+    <div class="f"><label>Status</label><select id="m_stat">${stat(ANFRAGE_STATI,d.status||'Neu')}</select></div>
   </div><div class="f" style="margin-top:10px"><label>Notiz</label><textarea id="m_notiz" rows="3">${esc(d.notiz||'')}</textarea></div>`;
   if(type==='projekt')return`${kl}<div class="g2">
     <div class="f"><label>Projektbezeichnung *</label><input id="m_name" value="${esc(d.name||'')}"></div>
     <div class="f"><label>Kunde</label><input id="m_kunde" list="kl_m" value="${esc(d.kunde||'')}"></div>
     <div class="f"><label>Beginn</label><input id="m_beg" value="${esc(d.beginn||today())}"></div>
     <div class="f"><label>Ende (geplant)</label><input id="m_ende" value="${esc(d.ende||'')}"></div>
-    <div class="f"><label>Status</label><select id="m_stat">${stat(['geplant','aktiv','abgeschlossen','pausiert'],d.status||'geplant')}</select></div>
+    <div class="f"><label>Status</label><select id="m_stat">${stat(PROJEKT_STATI,d.status||'Entwurf')}</select></div>
     <div class="f"><label>Budget (€)</label><input type="number" id="m_bud" value="${d.budget||0}"></div>
   </div><div class="f" style="margin-top:10px"><label>Beschreibung</label><textarea id="m_beschr" rows="2">${esc(d.beschr||'')}</textarea></div>`;
   if(type==='auftrag')return`${kl}<div class="g2">
